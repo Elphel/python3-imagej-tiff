@@ -2,8 +2,9 @@
 Class imagej_tiff to read multilayer tiff files and parse tags
 * layers are stacked along depth (think RGB)
 * parse imagej generated tags (50838 and 50839)
+
 # Examples
-```sh
+```
 from PIL import Image
 import xml.etree.ElementTree as ET
 import numpy as np
