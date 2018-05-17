@@ -6,7 +6,6 @@ Class imagej_tiff to read multilayer tiff files and parse tags
 # Examples
 ```
 #!/usr/bin/env python3
-
 from PIL import Image
 import xml.etree.ElementTree as ET
 import numpy as np
