@@ -12,79 +12,9 @@ import imagej_tiff as ijt
 #tiff.show_images(['X-corr','Y-corr',0,2])
 #plt.show()
 
-import json
-import xml.etree.ElementTree as ET
-import xml.dom.minidom as minidom
-import ast
-
 import itertools
 
-class PackingTable:
-
-  def __init__(self,filename,layers_of_interest):
-    e = ET.parse(filename).getroot()
-    #print(ET.tostring(e))
-    #reparsed = minidom.parseString(ET.tostring(e,""))
-    #print(reparsed.toprettyxml(indent="\t"))
-
-    # Parse xml:
-    # td = tmp_dict
-    td = {}
-    for table in e:
-      layer = table.get('layer')
-      td[layer] = []
-      for row in table:
-        # safe evaluation
-        td[layer].append(ast.literal_eval(row.text))
-
-    # order
-    LUT = []
-    for layer in layers_of_interest:
-      LUT.append(td[layer])
-
-    self.lut = LUT
-
-
-# A tile consists of layers
-# layer is packed from 9x9 to 25x1
-def pack_layer(layer,lut_row):
-
-  #print(layer.shape)
-
-  t = layer.flatten()
-
-  out = np.array([])
-
-  # iterate through rows
-  for i in range(len(lut_row)):
-    val = 0
-    # process row value
-    for j in lut_row[i]:
-      if np.isnan(t[j[0]]):
-        val = np.nan
-        break
-      val += t[j[0]]*j[1]
-    out = np.append(out,val)
-
-  return out
-
-
-# tile and lut already ordered and indices match
-def pack_tile(tile,lut):
-
-  out = np.array([])
-  for i in range(len(lut)):
-    layer = pack_layer(tile[:,:,i],lut[i])
-    out = np.append(out,layer)
-
-  return out
-
-
-
-
-
-
-
+import pack_tile as pile
 
   # hard coded layers names
   #lst = ['diagm-pair','diago-pair']
@@ -150,7 +80,7 @@ LAYERS_OF_INTEREST = ['diagm-pair','diago-pair']
 # MAIN
 
 # get packing table
-pt = PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
+pt = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
 
 # get tiff
 tiff   = ijt.imagej_tiff(tiff_name)
@@ -170,7 +100,7 @@ for y,x in itertools.product(range(l.shape[0]),range(l.shape[1])):
 
 print(l)
 
-l_packed = pack_layer(l,pt[0])
+l_packed = pile.pack_layer(l,pt[0])
 
 #print(l_packed.shape)
 #print(l_packed)
@@ -191,7 +121,7 @@ ls = np.dstack((l1,l2))
 #print(ls)
 #print(ls.shape)
 
-l_packed = pack_tile(ls,pt)
+l_packed = pile.pack_tile(ls,pt)
 
 #print(l_packed)
 
