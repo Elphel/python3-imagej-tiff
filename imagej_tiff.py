@@ -24,6 +24,15 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "oleg@elphel.com"
 
+'''
+  Notes:
+    - Pillow 5.1.0. Version 4.1.1 throws error (VelueError):
+      ~$ (sudo) pip3 install Pillow --upgrade
+      ~$ python3
+      >>> import PIL
+      >>> PIL.PILLOW_VERSION
+      '5.1.0'
+'''
 
 from PIL import Image
 import xml.etree.ElementTree as ET
