@@ -67,3 +67,41 @@ def pack_tile(tile,lut):
     out = np.append(out,layer)
 
   return out
+
+# tiles are already packed
+def get_tile_with_neighbors(tiles,i,j,radius):
+
+  out = np.array([])
+  # max
+  Y,X = tiles.shape[0:2]
+  #print(str(Y)+" "+str(X))
+
+  for k in range(2*radius+1):
+
+    y = i+k-radius
+    if   y<0:
+      y = 0
+    elif y>(Y-1):
+      y = Y-1
+
+    for l in range(2*radius+1):
+
+      x = j+l-radius
+      if   x<0:
+        x = 0
+      elif x>(X-1):
+        x = X-1
+
+      out = np.append(out,tiles[y,x])
+
+  return out
+
+
+
+
+
+
+
+
+
+
