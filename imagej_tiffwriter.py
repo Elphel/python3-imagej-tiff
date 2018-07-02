@@ -81,10 +81,9 @@ def save(path,images):
 
   # 0 or 1 images.shapes are not handled
   #
-  # save single channel image in the form of numpy array
-  #   -
-  if   len(images.shape)==2:
-    # (h,w) -> (h,w,c=1)
+  # (h,w)
+  if len(images.shape)==2:
+
     image = Image.fromarray(images)
     image.save(path)
 
@@ -102,15 +101,14 @@ def save(path,images):
 
     t  = images.shape[-5]
 
-    c_axis = len(images.shape)-1
+    c_axis = -1
 
-    if c>1:
-      channels = np.squeeze(np.split(images,c,axis=c_axis))
+    if c==1:
+      split_channels = images
     else:
-      channels = np.squeeze(images,axis=c_axis)
+      channels = np.array(np.split(images,c,axis=c_axis))
+      split_channels = np.concatenate(channels,axis=-3)
 
-
-    split_channels = np.concatenate(channels,axis=-3)
     images_flat = np.reshape(split_channels,(-1,h,w))
 
     imlist = []
@@ -147,4 +145,18 @@ if __name__ == "__main__":
   print(str(time.time())+": Test images generated")
   print("Images shape: "+str(images.shape))
 
-  v = save("result_2.tiff",images)
+  print("5D run")
+  v = save("result_5D.tiff",images)
+  print("4D run")
+  v = save("result_4D.tiff",images[0])
+  print("3D run")
+  v = save("result_3D.tiff",images[0,0])
+  print("3D run, 1 channel")
+  tmp_images = images[0,0,:,:,0]
+  v = save("result_3D1C.tiff",tmp_images[:,:,np.newaxis])
+
+
+
+
+
+
