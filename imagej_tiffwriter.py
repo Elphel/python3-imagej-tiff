@@ -24,19 +24,52 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "oleg@elphel.com"
 
+'''
+Usage example:
+  import imagej_tiffwriter
+  import numpy as np
+
+  # have a few images in the form of numpy arrays
+  # make sure to stack them as:
+  #   - (t,z,h,w,c)
+  #   - (z,h,w,c)
+  #   - (h,w,c)
+  #   - (h,w)
+
+  imagej_tiffwriter.save(path,images)
+
+'''
+
 from PIL import Image, TiffImagePlugin
 import numpy as np
 import math
 
+# DO NOT USE?
+# thing is the old ImageJs <1.52d poorly handle tags directories or something like that
 def __get_IJ_IFD(t,z,c):
 
   ifd = TiffImagePlugin.ImageFileDirectory_v2()
+
+  ijheader = [
+    'ImageJ=',
+    'hyperstack=true',
+    'images='+str(t*z*c),
+    'channels='+str(c),
+    'slices='+str(z),
+    'frames='+str(t),
+    'loop=false'
+  ]
+
+  ifd[270] = ("\n".join(ijheader)+"\n")
+
   #is_hyperstack = 'true' if len(shape)>1 else 'false'
   #if (len(shape)>0):
+
   return ifd
 
 
-def save(path,images,force_stack=False,force_hyperstack=False):
+#def save(path,images,force_stack=False,force_hyperstack=False):
+def save(path,images):
 
   # Got images, analyze shape:
   #   - possible formats (c == depth):
@@ -45,34 +78,51 @@ def save(path,images,force_stack=False,force_hyperstack=False):
   #     -- (h,w,c)
   #     -- (h,w)
 
-  # save single layer image
+
+  # 0 or 1 images.shapes are not handled
+  #
+  # save single channel image in the form of numpy array
+  #   -
   if   len(images.shape)==2:
     # (h,w) -> (h,w,c=1)
-    images = images[:,:,np.newaxis]
+    image = Image.fromarray(images)
+    image.save(path)
+
   elif len(images.shape)>2:
-    # do nothing
-    pass
-  else:
-    # (w,) -> (h=1,w,c=1)
-    images = images[np.newaxis,:,np.newaxis]
 
-  #imlist = np.ravel(Image.fromarray(images))
-  t,z,h,w,c  = images.shape
-  c_axis = len(images.shape)-1
-  channels = np.squeeze(np.split(images,c,axis=c_axis))
+    h,w,c  = images.shape[-3:]
 
-  split_channels = np.concatenate(channels,axis=-3)
-  images_flat = np.reshape(split_channels,(-1,h,w))
+    if len(images.shape)==3:
+      images = np.reshape(images,(1,h,w,c))
 
-  imlist = []
-  for i in range(images_flat.shape[0]):
-    imlist.append(Image.fromarray(images_flat[i]))
+    z = images.shape[-4]
 
-  imlist[0].save(path,save_all=True,append_images=imlist[1:],tiffinfo=__get_IJ_IFD(t,z,c))
+    if len(images.shape)==4:
+      images = np.reshape(images,(1,z,h,w,c))
+
+    t  = images.shape[-5]
+
+    c_axis = len(images.shape)-1
+
+    if c>1:
+      channels = np.squeeze(np.split(images,c,axis=c_axis))
+    else:
+      channels = np.squeeze(images,axis=c_axis)
+
+
+    split_channels = np.concatenate(channels,axis=-3)
+    images_flat = np.reshape(split_channels,(-1,h,w))
+
+    imlist = []
+    for i in range(images_flat.shape[0]):
+      imlist.append(Image.fromarray(images_flat[i]))
+
+    imlist[0].save(path,save_all=True,append_images=imlist[1:])
+    # thing is the old ImageJs <1.52d poorly handle tags directories or something like that
+    #imlist[0].save(path,save_all=True,append_images=imlist[1:],tiffinfo=__get_IJ_IFD(t,z,c))
 
 # Testing
 if __name__ == "__main__":
-
 
   def hamming_window(x,N):
     y = 0.54 - 0.46*math.cos(2*math.pi*x/(N-1))
