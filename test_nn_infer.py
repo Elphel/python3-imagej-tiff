@@ -68,13 +68,14 @@ def lrelu(x):
 
 def network(input):
 
-  fc1 = slim.fully_connected(input,101,activation_fn=lrelu,scope='g_fc1')
-  fc2 = slim.fully_connected(fc1,  101,activation_fn=lrelu,scope='g_fc2')
-  fc3 = slim.fully_connected(fc2,  101,activation_fn=lrelu,scope='g_fc3')
-  fc4 = slim.fully_connected(fc3,  101,activation_fn=lrelu,scope='g_fc4')
-  fc5 = slim.fully_connected(fc4,    2,activation_fn=lrelu,scope='g_fc5')
+  fc1  = slim.fully_connected(input,2048,activation_fn=lrelu,scope='g_fc1')
+  fc2  = slim.fully_connected(fc1,  1024,activation_fn=lrelu,scope='g_fc2')
+  fc3  = slim.fully_connected(fc2,   512,activation_fn=lrelu,scope='g_fc3')
+  fc4  = slim.fully_connected(fc3,     8,activation_fn=lrelu,scope='g_fc4')
+  fc5  = slim.fully_connected(fc4,     4,activation_fn=lrelu,scope='g_fc5')
+  fc6  = slim.fully_connected(fc5,     2,activation_fn=lrelu,scope='g_fc6')
 
-  return fc5
+  return fc6
 
 
 sess = tf.Session()
@@ -147,6 +148,9 @@ for item in tlist:
   packed_tiles = np.array([[pile.pack_tile(tiles[i,j],ptab) for j in range(tiles.shape[1])] for i in range(tiles.shape[0])])
   packed_tiles = np.dstack((packed_tiles,values[:,:,0]))
 
+  print(packed_tiles.shape)
+  print("ENDDD!")
+
   # flatten
   packed_tiles_flat = packed_tiles.reshape(-1, packed_tiles.shape[-1])
   values_flat       = values.reshape(-1, values.shape[-1])
@@ -159,6 +163,25 @@ for item in tlist:
   output = sess.run(out,feed_dict={in_tile:packed_tiles_flat})
 
   print("Output shape: "+str(output.shape))
+
+  output_image = np.reshape(output,(tiles.shape[0],tiles.shape[1],-1))
+  print(output_image.shape)
+
+  import imagej_tiffwriter
+
+  # 1 prediction
+  # 2 ground truth
+  # difference 1 - 2
+
+  im1 = output_image[:,:,0]
+  im2 = values[:,:,1]
+  im3 = im1-im2
+
+  tif = np.dstack((im1,im2,im3))
+
+  imagej_tiffwriter.save('prediction_results.tiff',tif)
+
+  sys.exit(0)
 
   # so, let's print
   for i in range(output.shape[0]):
