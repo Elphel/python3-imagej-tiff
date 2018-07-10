@@ -159,6 +159,8 @@ for item in tlist:
   print("Values shape "+str(values_flat.shape))
   print_time()
 
+  # do line by line?!
+
   # now run prediction
   output = sess.run(out,feed_dict={in_tile:packed_tiles_flat})
 
