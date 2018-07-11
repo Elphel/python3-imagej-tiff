@@ -245,7 +245,6 @@ class imagej_tiff:
     #tmp_im = Image.fromarray(t)
     #tmp_im.show()
 
-
   # puts etrees in infoss
   def __parse_info(self):
 
@@ -317,14 +316,14 @@ if __name__ == "__main__":
 
   print(bcolors.BOLDWHITE+"time: "+str(time.time())+bcolors.ENDC)
 
-  print(ijt.labels)
-  print(ijt.infos)
+  print("TIFF stack labels: "+str(ijt.labels))
+  #print(ijt.infos)
 
   rough_string = ET.tostring(ijt.infos[0], "utf-8")
   reparsed = minidom.parseString(rough_string)
   print(reparsed.toprettyxml(indent="\t"))
 
-  print(ijt.props)
+  #print(ijt.props)
 
   # needed properties:
   print("Tiles shape: "+str(ijt.tileW)+"x"+str(ijt.tileH))
@@ -346,6 +345,23 @@ if __name__ == "__main__":
   # provide layer name
   values = ijt.getvalues(label='other')
   print("Stack of values shape: "+str(values.shape))
+
+  # each tile's disparity:
+
+  fig = plt.figure()
+  fig.suptitle("Estimated Disparity")
+  plt.imshow(values[:,:,0])
+  plt.colorbar()
+
+  fig = plt.figure()
+  fig.suptitle("Residual disparity")
+  plt.imshow(values[:,:,1])
+  plt.colorbar()
+
+  fig = plt.figure()
+  fig.suptitle("Residual disparity confidence")
+  plt.imshow(values[:,:,2])
+  plt.colorbar()
 
   print(bcolors.BOLDWHITE+"time: "+str(time.time())+bcolors.ENDC)
   #print(values)
@@ -383,8 +399,8 @@ if __name__ == "__main__":
   #ijt.show_images(['X-corr','Y-corr'])
   #ijt.show_images(['R-vign',3])
 
-  #ijt.show_images()
-  #plt.show()
+  ijt.show_images([0])
+  plt.show()
 
 
 
