@@ -47,7 +47,7 @@ VALUES_LAYER_NAME = 'other'
 LAYERS_OF_INTEREST = ['diagm-pair', 'diago-pair', 'hor-pairs', 'vert-pairs']
 RADIUS = 1
 
-DEBUG_PLT_LOSS = False
+DEBUG_PLT_LOSS = True
 # If false - will not pack or rescal
 DEBUG_PACK_TILES = True
 
@@ -75,6 +75,9 @@ if not IS_TEST:
   print("\n".join(tlist))
   print("Found "+str(len(tlist))+" preprocessed tiff files:")
   print_time()
+
+  pass
+
   ''' WARNING, assuming:
         - timestamps and part of names match
         - layer order and names are identical
@@ -148,7 +151,6 @@ if not IS_TEST:
 
   # might not need it because going to loop through anyway
   packed_tiles = np.array([[pile.pack_tile(tiles[i,j],ptab) for j in range(tiles.shape[1])] for i in range(tiles.shape[0])])
-
   packed_tiles = np.dstack((packed_tiles,values[:,:,0]))
 
   print("Packed (81x4 -> 1x(25*4+1)) tiled input shape: "+str(packed_tiles.shape))
@@ -260,8 +262,9 @@ cf_w_norm = tf.nn.softmax(cf_w)
 #out_cf = out[:,1]
 
 #G_loss = tf.reduce_mean(tf.abs(tf.nn.softmax(out[:,1])*out[:,0]-cf_w_norm*gt[:,0]))
-G_loss = tf.reduce_mean(tf.squared_difference(out[:,0], gt[:,0]))
+#G_loss = tf.reduce_mean(tf.squared_difference(out[:,0], gt[:,0]))
 #G_loss = tf.reduce_mean(tf.abs(out[:,0]-gt[:,0]))
+G_loss = tf.losses.mean_squared_error(gt[:,0],out[:,0],cf_w)
 
 tf.summary.scalar('loss', G_loss)
 tf.summary.scalar('prediction', out[0,0])
@@ -303,7 +306,7 @@ recorded_gt_c = []
 recorded_pr_d = []
 recorded_pr_c = []
 
-LR = 1e-4
+LR = 1e-5
 
 print(bcolors.HEADER+"Last Epoch = "+str(lastepoch)+bcolors.ENDC)
 
@@ -316,13 +319,36 @@ if DEBUG_PLT_LOSS:
 
 
 # RUN
+# epoch is one image
 
-for epoch in range(lastepoch,1):
+
+
+for epoch in range(lastepoch,lastepoch+len(tlist)):
+
+  print(bcolors.HEADER+"Epoch #"+str(epoch)+bcolors.ENDC)
+
 #for epoch in range(lastepoch,4001):
   if os.path.isdir("result/%04d"%epoch):
     continue
 
   cnt=0
+
+  tlist_index = epoch - lastepoch
+
+  print(bcolors.OKGREEN+"Processing "+tlist[tlist_index]+bcolors.ENDC)
+
+  tmp_tiff  = ijt.imagej_tiff(tlist[tlist_index])
+  tmp_tiles = tmp_tiff.getstack(labels,shape_as_tiles=True)
+  tmp_vals  = tmp_tiff.getvalues(label=VALUES_LAYER_NAME)
+
+  # Parse packing table
+  # packing table name
+  ptab_name = "tile_packing_table.xml"
+  ptab = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
+
+  # might not need it because going to loop through anyway
+  packed_tiles = np.array([[pile.pack_tile(tmp_tiles[i,j],ptab) for j in range(tmp_tiles.shape[1])] for i in range(tmp_tiles.shape[0])])
+  packed_tiles = np.dstack((packed_tiles,tmp_vals[:,:,0]))
 
   #if epoch > 2000:
   #  LR = 1e-5
@@ -429,10 +455,9 @@ for epoch in range(lastepoch,1):
 
       else:
         print("%d %d Loss=%.3f CurrentLoss=%.3f Time=%.3f"%(epoch,cnt,mean_loss,G_current,time.time()-st))
-        train_writer.add_run_metadata(run_metadata, 'step%d' % cnt)
-
+        #train_writer.add_run_metadata(run_metadata, 'step%d' % cnt)
         #test_writer.add_summary(summary,cnt)
-        train_writer.add_summary(summary, cnt)
+        #train_writer.add_summary(summary, cnt)
 
     if epoch%save_freq==0:
       if not os.path.isdir(result_dir + '%04d'%epoch):

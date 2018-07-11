@@ -151,24 +151,49 @@ for item in tlist:
   print(packed_tiles.shape)
   print("ENDDD!")
 
+  # NO
   # flatten
-  packed_tiles_flat = packed_tiles.reshape(-1, packed_tiles.shape[-1])
-  values_flat       = values.reshape(-1, values.shape[-1])
+  #packed_tiles_flat = packed_tiles.reshape(-1, packed_tiles.shape[-1])
+  #values_flat       = values.reshape(-1, values.shape[-1])
 
-  print("Packed (81x4 -> 1x(25*4+1)) tiled input shape: "+str(packed_tiles_flat.shape))
-  print("Values shape "+str(values_flat.shape))
-  print_time()
+  #print("Packed (81x4 -> 1x(25*4+1)) tiled input shape: "+str(packed_tiles_flat.shape))
+  #print("Values shape "+str(values_flat.shape))
+  #print_time()
 
   # do line by line?!
+  output_image = np.empty((packed_tiles.shape[0],packed_tiles.shape[1],2))
+  print("Output shape = "+str(output_image.shape))
 
-  # now run prediction
-  output = sess.run(out,feed_dict={in_tile:packed_tiles_flat})
+  for i in range(packed_tiles.shape[0]):
 
-  print("Output shape: "+str(output.shape))
+    # now run prediction
+    packed_tiles_flat = packed_tiles[i]
+    values_flat       = values[i]
 
-  output_image = np.reshape(output,(tiles.shape[0],tiles.shape[1],-1))
-  print(output_image.shape)
+    output = sess.run(out,feed_dict={in_tile:packed_tiles_flat})
+    output_image[i] = output
 
+    # so, let's print
+    for j in range(output.shape[0]):
+      p  = output[j,0]
+      pc = output[j,1]
+      fv = values_flat[j,0]
+      gt = values_flat[j,1]
+      cf = values_flat[j,2]
+
+      vstring = "["+"{0:.2f}".format(fv)+", "+"{0:.2f}".format(gt)+", "+"{0:.2f}".format(cf)+"]"
+      pstring = "["+"{0:.2f}".format(p)+", "+"{0:.2f}".format(pc)+"]"
+
+      if not np.isnan(p):
+        outstring = "i,j: "+str(i)+"  "+str(j)+"    Values:  "+vstring+"    Prediction:  "+pstring
+        if abs(cf)<0.5:
+          print(outstring)
+          #pass
+        else:
+          print(bcolors.WARNING+outstring+bcolors.ENDC)
+
+
+  sess.close()
   import imagej_tiffwriter
 
   # 1 prediction
@@ -183,25 +208,7 @@ for item in tlist:
 
   imagej_tiffwriter.save('prediction_results.tiff',tif)
 
-  sys.exit(0)
-
-  # so, let's print
-  for i in range(output.shape[0]):
-    p  = output[i,0]
-    pc = output[i,1]
-    fv = values_flat[i,0]
-    gt = values_flat[i,1]
-    cf = values_flat[i,2]
-
-    vstring = "["+"{0:.2f}".format(fv)+", "+"{0:.2f}".format(gt)+", "+"{0:.2f}".format(cf)+"]"
-    pstring = "["+"{0:.2f}".format(p)+", "+"{0:.2f}".format(pc)+"]"
-
-    if not np.isnan(p):
-      outstring = "i: "+str(i)+"    Values:  "+vstring+"    Prediction:  "+pstring
-      if cf<0.5:
-        print(outstring)
-      else:
-        print(bcolors.WARNING+outstring+bcolors.ENDC)
+  #sys.exit(0)
 
     #else:
     #  print("i: "+str(i)+" NaNs")
