@@ -42,18 +42,25 @@ def pack_layer(layer,lut_row):
 
   t = layer.flatten()
 
-  out = np.array([])
+  #out = np.array([])
+  out = np.empty(len(lut_row))
 
   # iterate through rows
   for i in range(len(lut_row)):
+
     val = 0
     # process row value
     for j in lut_row[i]:
-      if np.isnan(t[j[0]]):
-        val = np.nan
-        break
-      val += t[j[0]]*j[1]
-    out = np.append(out,val)
+      ## big slowdown
+      #if np.isnan(t[j[0]]):
+      # val = np.nan
+      #  break
+      #val += t[j[0]]*j[1]
+      val += t[j[0]]
+
+    #out = np.append(out,val)
+    #out[i] = val
+    out[i] = val
 
   return out
 
@@ -61,12 +68,24 @@ def pack_layer(layer,lut_row):
 # tile and lut already ordered and indices match
 def pack_tile(tile,lut):
 
-  out = np.array([])
+  #out = np.array([])
+  #s = 0
+  #for i in range(len(lut)):
+  #  s += len(lut[i])
+
+  #out = np.empty(s)
+  out = np.empty(100)
+
+  ptr = 0
   for i in range(len(lut)):
     layer = pack_layer(tile[:,:,i],lut[i])
-    out = np.append(out,layer)
+    #out = np.append(out,layer)
+    out[ptr:ptr+len(lut[i])] = layer
+    #out[ptr:ptr+len(lut[i])] = np.empty(25)
+    ptr += len(lut[i])
 
   return out
+
 
 # tiles are already packed
 def get_tile_with_neighbors(tiles,i,j,radius):
