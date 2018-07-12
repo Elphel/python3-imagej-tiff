@@ -322,22 +322,20 @@ for epoch in range(lastepoch,lastepoch+len(tlist)):
     #print(input_patch)
     #print(gt_patch)
 
-    gt_patch[gt_patch==-256] = np.nan
-    gt_patch[np.isnan(gt_patch)] = 0
+    #gt_patch[gt_patch==-256] = np.nan
+    #gt_patch[np.isnan(gt_patch)] = 0
 
     input_patch[np.isnan(input_patch)] = 0
 
     skip_iteration = False
 
-    if values[i,j,0]==-256 and values[i,j,1]==-256:
-      print("Have to SKIP!")
-      skip_iteration = True
-
     # if nan skip run!
     if np.isnan(np.sum(gt_patch)):
+      print("GT has NaNs")
       skip_iteration = True
 
     if np.isnan(np.sum(input_patch)):
+      print("Patch has NaNs")
       skip_iteration = True
 
 
