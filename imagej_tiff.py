@@ -175,6 +175,14 @@ class imagej_tiff:
           res[i,j,1] = np.nan
           res[i,j,2] = np.nan
 
+    # NaNize
+    a = res[:,:,0]
+    a[a==-256] = np.nan
+    b = res[:,:,1]
+    b[b==-256] = np.nan
+    c = res[:,:,2]
+    c[c==0] = np.nan
+
     return res
 
 
@@ -354,7 +362,7 @@ if __name__ == "__main__":
   plt.colorbar()
 
   fig = plt.figure()
-  fig.suptitle("Residual disparity")
+  fig.suptitle("Esitmated+Residual disparity")
   plt.imshow(values[:,:,1])
   plt.colorbar()
 
