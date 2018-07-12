@@ -139,13 +139,8 @@ for item in tlist:
   # now pack from 9x9 to 1x25
   # tiles and values
 
-  # Parse packing table
-  # packing table name
-  ptab_name = "tile_packing_table.xml"
-  ptab = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
-
   # might not need it because going to loop through anyway
-  packed_tiles = np.array([[pile.pack_tile(tiles[i,j],ptab) for j in range(tiles.shape[1])] for i in range(tiles.shape[0])])
+  packed_tiles = pile.pack(tiles)
   packed_tiles = np.dstack((packed_tiles,values[:,:,0]))
 
   print(packed_tiles.shape)

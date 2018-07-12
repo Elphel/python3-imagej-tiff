@@ -141,66 +141,13 @@ if not IS_TEST:
 
   # test later
 
-  # now pack from 9x9 to 1x25
-  # tiles and values
-
-  # Parse packing table
-  # packing table name
-  ptab_name = "tile_packing_table.xml"
-  ptab = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
-
   # might not need it because going to loop through anyway
-  packed_tiles = np.array([[pile.pack_tile(tiles[i,j],ptab) for j in range(tiles.shape[1])] for i in range(tiles.shape[0])])
+  packed_tiles = pile.pack(tiles)
   packed_tiles = np.dstack((packed_tiles,values[:,:,0]))
 
   print("Packed (81x4 -> 1x(25*4+1)) tiled input shape: "+str(packed_tiles.shape))
   print("Values shape "+str(values.shape))
   print_time()
-
-else:
-  print("Init test data")
-
-  ptab_name = "tile_packing_table.xml"
-  pt = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
-
-  # 9x9 2 layers, no neighbors
-  l = np.zeros((9,9))
-  for y,x in itertools.product(range(l.shape[0]),range(l.shape[1])):
-    l[y,x] = 9*y + x
-
-  l_value = np.array([2.54,3.54,0.5])
-
-  #print(l)
-
-  l1 = l
-  l2 = l*2
-  l3 = l*3
-  l4 = l*4
-
-  ls = np.dstack((l1,l2,l3,l4))
-  #print(ls.shape)
-
-  l_packed_pre = pile.pack_tile(ls,pt)
-  #print(l_packed_pre.shape)
-  #print(l_packed_pre)
-
-  l_packed = np.hstack((l_packed_pre,l_value[0]))
-
-  #print(l_packed.shape)
-  #print(l_packed)
-  # use l_packed
-
-  packed_tiles = np.empty([1,1,l_packed.shape[0]])
-  values =       np.empty([1,1,2])
-  print(packed_tiles.shape)
-  print(values.shape)
-
-  packed_tiles[0,0] = l_packed
-  values[0,0] = l_value[1:3]
-
-  print(packed_tiles[0,0])
-  print(values[0,0])
-
 
 # END IF IS_TEST
 
@@ -341,13 +288,8 @@ for epoch in range(lastepoch,lastepoch+len(tlist)):
   tmp_tiles = tmp_tiff.getstack(labels,shape_as_tiles=True)
   tmp_vals  = tmp_tiff.getvalues(label=VALUES_LAYER_NAME)
 
-  # Parse packing table
-  # packing table name
-  ptab_name = "tile_packing_table.xml"
-  ptab = pile.PackingTable(ptab_name,LAYERS_OF_INTEREST).lut
-
   # might not need it because going to loop through anyway
-  packed_tiles = np.array([[pile.pack_tile(tmp_tiles[i,j],ptab) for j in range(tmp_tiles.shape[1])] for i in range(tmp_tiles.shape[0])])
+  packed_tiles = pile.pack(tmp_tiles)
   packed_tiles = np.dstack((packed_tiles,tmp_vals[:,:,0]))
 
   #if epoch > 2000:

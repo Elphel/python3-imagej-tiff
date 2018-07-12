@@ -399,7 +399,7 @@ if __name__ == "__main__":
   #ijt.show_images(['X-corr','Y-corr'])
   #ijt.show_images(['R-vign',3])
 
-  ijt.show_images([0])
+  ijt.show_images()
   plt.show()
 
 
