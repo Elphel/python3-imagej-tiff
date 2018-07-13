@@ -68,14 +68,17 @@ def lrelu(x):
 
 def network(input):
 
-  fc1  = slim.fully_connected(input,2048,activation_fn=lrelu,scope='g_fc1')
-  fc2  = slim.fully_connected(fc1,  1024,activation_fn=lrelu,scope='g_fc2')
-  fc3  = slim.fully_connected(fc2,   512,activation_fn=lrelu,scope='g_fc3')
-  fc4  = slim.fully_connected(fc3,     8,activation_fn=lrelu,scope='g_fc4')
-  fc5  = slim.fully_connected(fc4,     4,activation_fn=lrelu,scope='g_fc5')
-  fc6  = slim.fully_connected(fc5,     2,activation_fn=lrelu,scope='g_fc6')
+  fc1  = slim.fully_connected(input,512,activation_fn=lrelu,scope='g_fc1')
+  fc2  = slim.fully_connected(fc1,    2,activation_fn=lrelu,scope='g_fc2')
+  return fc2
 
-  return fc6
+  #fc2  = slim.fully_connected(fc1,  1024,activation_fn=lrelu,scope='g_fc2')
+  #fc3  = slim.fully_connected(fc2,   512,activation_fn=lrelu,scope='g_fc3')
+  #fc4  = slim.fully_connected(fc3,     8,activation_fn=lrelu,scope='g_fc4')
+  #fc5  = slim.fully_connected(fc4,     4,activation_fn=lrelu,scope='g_fc5')
+  #fc6  = slim.fully_connected(fc5,     2,activation_fn=lrelu,scope='g_fc6')
+
+  #return fc6
 
 
 sess = tf.Session()
