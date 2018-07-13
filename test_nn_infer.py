@@ -69,7 +69,7 @@ def lrelu(x):
 
 def network(input):
 
-  fc1  = slim.fully_connected(input,512,activation_fn=lrelu,scope='g_fc1')
+  fc1  = slim.fully_connected(input,1024,activation_fn=lrelu,scope='g_fc1')
   fc2  = slim.fully_connected(fc1,    2,activation_fn=lrelu,scope='g_fc2')
   return fc2
 
