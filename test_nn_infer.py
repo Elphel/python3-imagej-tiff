@@ -44,6 +44,7 @@ def print_time():
 VALUES_LAYER_NAME = 'other'
 LAYERS_OF_INTEREST = ['diagm-pair', 'diago-pair', 'hor-pairs', 'vert-pairs']
 RADIUS = 1
+TILE_PACKING_TYPE = 1
 
 try:
   src = sys.argv[1]
@@ -83,7 +84,11 @@ def network(input):
 
 sess = tf.Session()
 
-in_tile = tf.placeholder(tf.float32,[None,101])
+if   TILE_PACKING_TYPE==1:
+  in_tile = tf.placeholder(tf.float32,[None,101])
+elif TILE_PACKING_TYPE==2:
+  in_tile = tf.placeholder(tf.float32,[None,105])
+
 gt      = tf.placeholder(tf.float32,[None,2])
 out = network(in_tile)
 
@@ -143,7 +148,11 @@ for item in tlist:
   # tiles and values
 
   # might not need it because going to loop through anyway
-  packed_tiles = pile.pack(tiles)
+  if   TILE_PACKING_TYPE==1:
+    packed_tiles = pile.pack(tiles)
+  elif TILE_PACKING_TYPE==2:
+    packed_tiles = pile.pack(tiles,TILE_PACKING_TYPE)
+
   packed_tiles = np.dstack((packed_tiles,values[:,:,0]))
 
   print(packed_tiles.shape)
@@ -168,11 +177,12 @@ for item in tlist:
     packed_tiles_flat = packed_tiles[i]
     values_flat       = values[i]
 
+    # whole row at once
     output = sess.run(out,feed_dict={in_tile:packed_tiles_flat})
     output_image[i] = output
 
     # so, let's print
-    for j in range(output.shape[0]):
+    for j in range(packed_tiles.shape[0]):
       p  = output[j,0]
       pc = output[j,1]
       fv = values_flat[j,0]
@@ -203,6 +213,15 @@ for item in tlist:
   im3 = im1-im2
 
   tif = np.dstack((im1,im2,im3))
+
+  im3 = np.ravel(im3)
+
+  print(im3.shape)
+
+  im4 = im3[~np.isnan(im3)]
+
+  rms = np.sqrt(np.mean(np.square(im4)))
+  print("RMS = "+str(rms))
 
   imagej_tiffwriter.save('prediction_results.tiff',tif)
 
