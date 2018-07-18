@@ -3,6 +3,12 @@ Class imagej_tiff to read multilayer tiff files and parse tags
 * layers are stacked along depth (think RGB)
 * parse imagej generated tags (50838 and 50839)
 
+# Dependencies
+* Python 3.5.2 (not strict)
+* Pillow 5.1.0+ (strict)
+* Numpy 1.14.2 (not strict)
+* Matplotlib 2.2.2 (not strict)
+
 # Examples
 ```
 #!/usr/bin/env python3
