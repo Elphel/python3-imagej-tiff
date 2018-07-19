@@ -264,8 +264,8 @@ for epoch in range(lastepoch,500):
   #packed_tiles[np.isnan(packed_tiles)] = 0.0
   #tmp_vals[np.isnan(tmp_vals)] = 0.0
 
-  input_patch = training_tiles
-  gt_patch    = training_values
+  input_patch = training_tiles[::2]
+  gt_patch    = training_values[::2]
 
   st=time.time()
 
