@@ -102,7 +102,7 @@ class imagej_tiff:
   __TIFF_TAG_LABELS_STRINGS = 50839
 
   # init
-  def __init__(self,filename):
+  def __init__(self,filename, layers = None):
     # file name
     self.fname = filename
     tif = Image.open(filename)
@@ -123,32 +123,43 @@ class imagej_tiff:
     # image layers stacked along depth - (think RGB)
     self.image = []
 
+    if layers is None:
     # fill self.image
-    for i in range(self.nimages):
-      tif.seek(i)
-      a = np.array(tif)
-      a = np.reshape(a,(a.shape[0],a.shape[1],1))
-
-      #a = a[:,:,np.newaxis]
-
-      # scale for 8-bits
-      # exclude layer named 'other'
-      if self.bpp==8:
-        _min = self.data_min
-        _max = self.data_max
-        _MIN = 1
-        _MAX = 255
-        a = a.astype(float)
-        if self.labels[i]!='other':
-          a[a==0]=np.nan
-          a = (_max-_min)*(a-_MIN)/(_MAX-_MIN)+_min
-
-      # init
-      if i==0:
-        self.image = a
-      # stack along depth (think of RGB channels)
-      else:
-        self.image = np.append(self.image,a,axis=2)
+        for i in range(self.nimages):
+          tif.seek(i)
+          a = np.array(tif)
+          a = np.reshape(a,(a.shape[0],a.shape[1],1))
+    
+          #a = a[:,:,np.newaxis]
+    
+          # scale for 8-bits
+          # exclude layer named 'other'
+          if self.bpp==8:
+            _min = self.data_min
+            _max = self.data_max
+            _MIN = 1
+            _MAX = 255
+            a = a.astype(float)
+            if self.labels[i]!='other':
+              a[a==0]=np.nan
+              a = (_max-_min)*(a-_MIN)/(_MAX-_MIN)+_min
+    
+          # init
+          if i==0:
+            self.image = a
+          # stack along depth (think of RGB channels)
+          else:
+            self.image = np.append(self.image,a,axis=2)
+    else:
+        indx = 0
+        for layer in layers:
+            tif.seek(self.labels.index(layer)) 
+            a = np.array(tif)
+            if not indx:
+                self.image = np.empty((a.shape[0],a.shape[1],len(layers)),a.dtype)
+            self.image[...,indx] = a
+            indx += 1
+        
 
     # init done, close the image
     tif.close()
@@ -266,17 +277,18 @@ class imagej_tiff:
     # properties dictionary
     pd = {}
 
-    for child in infos[0]:
-      #print(child.tag+"::::::"+child.text)
-      pd[child.tag] = child.text
-
-    self.props = pd
-
-    # tiles are squares
-    self.tileW = int(self.props['tileWidth'])
-    self.tileH = int(self.props['tileWidth'])
-    self.data_min = float(self.props['data_min'])
-    self.data_max = float(self.props['data_max'])
+    if infos:
+        for child in infos[0]:
+          #print(child.tag+"::::::"+child.text)
+          pd[child.tag] = child.text
+    
+        self.props = pd
+    
+        # tiles are squares
+        self.tileW = int(self.props['tileWidth'])
+        self.tileH = int(self.props['tileWidth'])
+        self.data_min = float(self.props['data_min'])
+        self.data_max = float(self.props['data_max'])
 
   # makes arrays of labels (strings) and unparsed xml infos
   def __split_labels(self,n,tag):
