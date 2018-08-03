@@ -194,77 +194,78 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
               gt_conf_pwr =            1.0):
-    """
-    Here confidence should be after relU. Disparity - may be also if absolute, but no activation if output is residual disparity
-    """
-    tf_lambda_conf_avg = tf.constant(lambda_conf_avg, dtype=tf.float32, name="tf_lambda_conf_avg")
-    tf_lambda_conf_pwr = tf.constant(lambda_conf_pwr, dtype=tf.float32, name="tf_lambda_conf_pwr")
-    tf_conf_pwr =        tf.constant(conf_pwr,        dtype=tf.float32, name="tf_conf_pwr")
-    tf_gt_conf_offset =  tf.constant(gt_conf_offset,  dtype=tf.float32, name="tf_gt_conf_offset")
-    tf_gt_conf_pwr =     tf.constant(gt_conf_pwr,     dtype=tf.float32, name="tf_gt_conf_pwr")
-    tf_num_tiles =       tf.shape(gt_ds_batch)[0]
-    tf_0f =              tf.constant(0.0,             dtype=tf.float32, name="tf_0f")
-    tf_1f =              tf.constant(1.0,             dtype=tf.float32, name="tf_1f")
-    tf_maxw =            tf.constant(1.0,             dtype=tf.float32, name="tf_maxw")
-    if gt_conf_pwr == 0:
-        w = tf.ones((out_batch.shape[0]), dtype=tf.float32,name="w_ones")
-    else:
-#        w_slice = tf.slice(gt_ds_batch,[0,1],[-1,1],              name = "w_gt_slice")
-        w_slice = tf.reshape(gt_ds_batch[:,1],[-1],                     name = "w_gt_slice")
-        
-        w_sub =   tf.subtract      (w_slice, tf_gt_conf_offset,         name = "w_sub")
-#        w_clip =  tf.clip_by_value(w_sub, tf_0f,tf_maxw,              name = "w_clip")
-        w_clip =  tf.maximum(w_sub, tf_0f,                              name = "w_clip")
-        if gt_conf_pwr == 1.0:
-            w = w_clip
+    with tf.name_scope("BatchLoss"):
+        """
+        Here confidence should be after relU. Disparity - may be also if absolute, but no activation if output is residual disparity
+        """
+        tf_lambda_conf_avg = tf.constant(lambda_conf_avg, dtype=tf.float32, name="tf_lambda_conf_avg")
+        tf_lambda_conf_pwr = tf.constant(lambda_conf_pwr, dtype=tf.float32, name="tf_lambda_conf_pwr")
+        tf_conf_pwr =        tf.constant(conf_pwr,        dtype=tf.float32, name="tf_conf_pwr")
+        tf_gt_conf_offset =  tf.constant(gt_conf_offset,  dtype=tf.float32, name="tf_gt_conf_offset")
+        tf_gt_conf_pwr =     tf.constant(gt_conf_pwr,     dtype=tf.float32, name="tf_gt_conf_pwr")
+        tf_num_tiles =       tf.shape(gt_ds_batch)[0]
+        tf_0f =              tf.constant(0.0,             dtype=tf.float32, name="tf_0f")
+        tf_1f =              tf.constant(1.0,             dtype=tf.float32, name="tf_1f")
+        tf_maxw =            tf.constant(1.0,             dtype=tf.float32, name="tf_maxw")
+        if gt_conf_pwr == 0:
+            w = tf.ones((out_batch.shape[0]), dtype=tf.float32,name="w_ones")
         else:
-            w=tf.pow(w_clip, tf_gt_conf_pwr, name = "w")
-
-    if use_confidence:
-        tf_num_tilesf =      tf.cast(tf_num_tiles, dtype=tf.float32,     name="tf_num_tilesf")
-#        conf_slice =     tf.slice(out_batch,[0,1],[-1,1],                name = "conf_slice")
-        conf_slice =     tf.reshape(out_batch[:,1],[-1],                 name = "conf_slice")
-        conf_sum =       tf.reduce_sum(conf_slice,                       name = "conf_sum")
-        conf_avg =       tf.divide(conf_sum, tf_num_tilesf,              name = "conf_avg")
-        conf_avg1 =      tf.subtract(conf_avg, tf_1f,                    name = "conf_avg1")
-        conf_avg2 =      tf.square(conf_avg1,                            name = "conf_avg2")
-        cost2 =          tf.multiply (conf_avg2, tf_lambda_conf_avg,     name = "cost2")
-
-        iconf_avg =      tf.divide(tf_1f, conf_avg,                      name = "iconf_avg")
-        nconf =          tf.multiply (conf_slice, iconf_avg,             name = "nconf") #normalized confidence
-        nconf_pwr =      tf.pow(nconf, conf_pwr,                         name = "nconf_pwr")
-        nconf_pwr_sum =  tf.reduce_sum(nconf_pwr,                        name = "nconf_pwr_sum")
-        nconf_pwr_offs = tf.subtract(nconf_pwr_sum, tf_1f,               name = "nconf_pwr_offs")
-        cost3 =          tf.multiply (conf_avg2, nconf_pwr_offs,         name = "cost3")
-        w_all =          tf.multiply (w, nconf,                          name = "w_all")
-    else:
-        w_all = w
-        cost2 = 0.0
-        cost3 = 0.0    
-    # normalize weights
-    w_sum =              tf.reduce_sum(w_all,                            name = "w_sum")
-    iw_sum =             tf.divide(tf_1f, w_sum,                         name = "iw_sum")
-    w_norm =             tf.multiply (w_all, iw_sum,                     name = "w_norm")
+    #        w_slice = tf.slice(gt_ds_batch,[0,1],[-1,1],              name = "w_gt_slice")
+            w_slice = tf.reshape(gt_ds_batch[:,1],[-1],                     name = "w_gt_slice")
+            
+            w_sub =   tf.subtract      (w_slice, tf_gt_conf_offset,         name = "w_sub")
+    #        w_clip =  tf.clip_by_value(w_sub, tf_0f,tf_maxw,              name = "w_clip")
+            w_clip =  tf.maximum(w_sub, tf_0f,                              name = "w_clip")
+            if gt_conf_pwr == 1.0:
+                w = w_clip
+            else:
+                w=tf.pow(w_clip, tf_gt_conf_pwr, name = "w")
     
-#    disp_slice =         tf.slice(out_batch,[0,0],[-1,1],                name = "disp_slice")
-#    d_gt_slice =         tf.slice(gt_ds_batch,[0,0],[-1,1],              name = "d_gt_slice")
-    disp_slice =         tf.reshape(out_batch[:,0],[-1],                 name = "disp_slice")
-    d_gt_slice =         tf.reshape(gt_ds_batch[:,0],[-1],               name = "d_gt_slice")
-    if absolute_disparity:
-        out_diff =       tf.subtract(disp_slice, d_gt_slice,             name = "out_diff")
-    else:
-        td_flat =        tf.reshape(target_disparity_batch,[-1],         name = "td_flat")
-        residual_disp =  tf.subtract(d_gt_slice, td_flat,                name = "residual_disp")
-        out_diff =       tf.subtract(disp_slice, residual_disp,          name = "out_diff")
-    out_diff2 =          tf.square(out_diff,                             name = "out_diff2")
-    out_wdiff2 =         tf.multiply (out_diff2, w_norm,                 name = "out_wdiff2")
-    cost1 =              tf.reduce_sum(out_wdiff2,                       name = "cost1")
-    if use_confidence:
-        cost12 =         tf.add(cost1,  cost2,                           name = "cost12")
-        cost123 =        tf.add(cost12, cost3,                           name = "cost123")
-        return cost123, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
-    else:
-        return cost1, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
+        if use_confidence:
+            tf_num_tilesf =      tf.cast(tf_num_tiles, dtype=tf.float32,     name="tf_num_tilesf")
+    #        conf_slice =     tf.slice(out_batch,[0,1],[-1,1],                name = "conf_slice")
+            conf_slice =     tf.reshape(out_batch[:,1],[-1],                 name = "conf_slice")
+            conf_sum =       tf.reduce_sum(conf_slice,                       name = "conf_sum")
+            conf_avg =       tf.divide(conf_sum, tf_num_tilesf,              name = "conf_avg")
+            conf_avg1 =      tf.subtract(conf_avg, tf_1f,                    name = "conf_avg1")
+            conf_avg2 =      tf.square(conf_avg1,                            name = "conf_avg2")
+            cost2 =          tf.multiply (conf_avg2, tf_lambda_conf_avg,     name = "cost2")
+    
+            iconf_avg =      tf.divide(tf_1f, conf_avg,                      name = "iconf_avg")
+            nconf =          tf.multiply (conf_slice, iconf_avg,             name = "nconf") #normalized confidence
+            nconf_pwr =      tf.pow(nconf, conf_pwr,                         name = "nconf_pwr")
+            nconf_pwr_sum =  tf.reduce_sum(nconf_pwr,                        name = "nconf_pwr_sum")
+            nconf_pwr_offs = tf.subtract(nconf_pwr_sum, tf_1f,               name = "nconf_pwr_offs")
+            cost3 =          tf.multiply (conf_avg2, nconf_pwr_offs,         name = "cost3")
+            w_all =          tf.multiply (w, nconf,                          name = "w_all")
+        else:
+            w_all = w
+#            cost2 = 0.0
+#            cost3 = 0.0    
+        # normalize weights
+        w_sum =              tf.reduce_sum(w_all,                            name = "w_sum")
+        iw_sum =             tf.divide(tf_1f, w_sum,                         name = "iw_sum")
+        w_norm =             tf.multiply (w_all, iw_sum,                     name = "w_norm")
+        
+    #    disp_slice =         tf.slice(out_batch,[0,0],[-1,1],                name = "disp_slice")
+    #    d_gt_slice =         tf.slice(gt_ds_batch,[0,0],[-1,1],              name = "d_gt_slice")
+        disp_slice =         tf.reshape(out_batch[:,0],[-1],                 name = "disp_slice")
+        d_gt_slice =         tf.reshape(gt_ds_batch[:,0],[-1],               name = "d_gt_slice")
+        if absolute_disparity:
+            out_diff =       tf.subtract(disp_slice, d_gt_slice,             name = "out_diff")
+        else:
+            td_flat =        tf.reshape(target_disparity_batch,[-1],         name = "td_flat")
+            residual_disp =  tf.subtract(d_gt_slice, td_flat,                name = "residual_disp")
+            out_diff =       tf.subtract(disp_slice, residual_disp,          name = "out_diff")
+        out_diff2 =          tf.square(out_diff,                             name = "out_diff2")
+        out_wdiff2 =         tf.multiply (out_diff2, w_norm,                 name = "out_wdiff2")
+        cost1 =              tf.reduce_sum(out_wdiff2,                       name = "cost1")
+        if use_confidence:
+            cost12 =         tf.add(cost1,  cost2,                           name = "cost12")
+            cost123 =        tf.add(cost12, cost3,                           name = "cost123")
+            return cost123, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
+        else:
+            return cost1, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
     
 
 #corr2d325 = tf.concat([corr2d,target_disparity],0)
