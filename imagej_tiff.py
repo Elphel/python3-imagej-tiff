@@ -102,7 +102,7 @@ class imagej_tiff:
   __TIFF_TAG_LABELS_STRINGS = 50839
 
   # init
-  def __init__(self,filename, layers = None):
+  def __init__(self,filename, layers = None, tile_list = None):
     # file name
     self.fname = filename
     tif = Image.open(filename)
@@ -120,6 +120,10 @@ class imagej_tiff:
 
     self.__split_labels(tif.n_frames,tif.tag)
     self.__parse_info()
+    try:
+        self.nan_bug = self.props['VERSION']== '1.0' # data between min and max is mapped to 0..254 instead of  1.255
+    except:
+        self.nan_bug = False # other files, not ML ones
     # image layers stacked along depth - (think RGB)
     self.image = []
 
@@ -139,11 +143,16 @@ class imagej_tiff:
             _max = self.data_max
             _MIN = 1
             _MAX = 255
+            if (self.nan_bug):
+                _MIN = 0
+                _MAX = 254
+            else:
+                if self.labels[i]!='other':
+                    a[a==0]=np.nan
             a = a.astype(float)
             if self.labels[i]!='other':
-              a[a==0]=np.nan
+#              a[a==0]=np.nan
               a = (_max-_min)*(a-_MIN)/(_MAX-_MIN)+_min
-    
           # init
           if i==0:
             self.image = a
@@ -151,15 +160,59 @@ class imagej_tiff:
           else:
             self.image = np.append(self.image,a,axis=2)
     else:
-        indx = 0
-        for layer in layers:
-            tif.seek(self.labels.index(layer)) 
-            a = np.array(tif)
-            if not indx:
-                self.image = np.empty((a.shape[0],a.shape[1],len(layers)),a.dtype)
-            self.image[...,indx] = a
-            indx += 1
-        
+        if tile_list is None:
+            indx = 0
+            for layer in layers:
+                tif.seek(self.labels.index(layer)) 
+                a = np.array(tif)
+                if not indx:
+                    self.image = np.empty((a.shape[0],a.shape[1],len(layers)),a.dtype)
+                self.image[...,indx] = a
+                indx += 1
+        else:
+            other_label = "other"
+#            print(tile_list)
+            num_tiles =  len(tile_list)
+            num_layers = len(layers)
+            tiles_corr = np.empty((num_tiles,num_layers,self.tileH*self.tileW),dtype=float)
+#            tiles_other=np.empty((num_tiles,3),dtype=float)
+            tiles_other=self.gettilesvalues(
+                     tif = tif,
+                     tile_list=tile_list,
+                     label=other_label)
+            for nl,label in enumerate(layers):
+                tif.seek(self.labels.index(label))
+                layer = np.array(tif) # 8 or 32 bits
+                tilesX = layer.shape[1]//self.tileW
+                for nt,tl in enumerate(tile_list):
+                    ty = tl // tilesX
+                    tx = tl % tilesX
+#                    tiles_corr[nt,nl] = np.ravel(layer[self.tileH*ty:self.tileH*(ty+1),self.tileW*tx:self.tileW*(tx+1)])
+                    a = np.ravel(layer[self.tileH*ty:self.tileH*(ty+1),self.tileW*tx:self.tileW*(tx+1)])
+                    #convert from int8
+                    if self.bpp==8:
+                        a = a.astype(float)
+                        if np.isnan(tiles_other[nt][0]):
+                            # print("Skipping NaN tile ",tl)
+                            a[...] = np.nan
+                        else:
+                            _min = self.data_min
+                            _max = self.data_max
+                            _MIN = 1
+                            _MAX = 255
+                            if (self.nan_bug):
+                                _MIN = 0
+                                _MAX = 254
+                            else:    
+                                a[a==0] = np.nan
+                            a = (_max-_min)*(a-_MIN)/(_MAX-_MIN)+_min
+                    tiles_corr[nt,nl] = a    
+                    pass
+                pass
+            self.corr2d =           tiles_corr
+            self.target_disparity = tiles_other[...,0]
+            self.gt_ds =            tiles_other[...,1:3]
+            pass
 
     # init done, close the image
     tif.close()
@@ -193,8 +246,44 @@ class imagej_tiff:
     b[b==-256] = np.nan
     c = res[:,:,2]
     c[c==0] = np.nan
+    return res
+
+  # 3 values per tile: target disparity, GT disparity, GT confidence
+  def gettilesvalues(self,
+                     tif,
+                     tile_list,
+                     label=""):
+    res = np.empty((len(tile_list),3),dtype=float)
+    tif.seek(self.labels.index(label))
+    layer = np.array(tif) # 8 or 32 bits
+    tilesX = layer.shape[1]//self.tileW
+    for i,tl in enumerate(tile_list):
+        ty = tl // tilesX
+        tx = tl % tilesX
+        m = np.ravel(layer[self.tileH*ty:self.tileH*(ty+1),self.tileW*tx:self.tileW*(tx+1)])
+        if self.bpp==32:
+          res[i,0] = m[0]
+          res[i,1] = m[2]
+          res[i,2] = m[4]
+        elif self.bpp==8:
+          res[i,0] = ((m[0]-128)*256+m[1])/128
+          res[i,1] = ((m[2]-128)*256+m[3])/128
+          res[i,2] = (m[4]*256+m[5])/65536.0
+        else:
+          res[i,0] = np.nan
+          res[i,1] = np.nan
+          res[i,2] = np.nan
+    # NaNize
+    a = res[...,0]
+    a[a==-256] = np.nan
+    b = res[...,1]
+    b[b==-256] = np.nan
+    c = res[...,2]
+    c[c==0] = np.nan
 
     return res
+
+
 
 
   # get ordered stack of images by provided items
@@ -323,8 +412,9 @@ if __name__ == "__main__":
   try:
     fname = sys.argv[1]
   except IndexError:
-    fname = "1521849031_093189-ML_DATA-32B-O-OFFS1.0.tiff"
-    fname = "1521849031_093189-ML_DATA-08B-O-OFFS1.0.tiff"
+    fname = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/train/1527182807_896892/v02/ml/1527182807_896892-ML_DATA-08B-O-FZ0.05-OFFS0.40000.tiff"
+#    fname = "1521849031_093189-ML_DATA-32B-O-OFFS1.0.tiff"
+#    fname = "1521849031_093189-ML_DATA-08B-O-OFFS1.0.tiff"
 
   #fname = "1521849031_093189-DISP_MAP-D0.0-46.tif"
   #fname = "1526905735_662795-ML_DATA-08B-AIOTD-OFFS2.0.tiff"
