@@ -297,7 +297,6 @@ t_vars=tf.trainable_variables()
 lr=tf.placeholder(tf.float32)
 G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
 
-
 saver=tf.train.Saver()
 
 ROOT_PATH  = './attic/nn_ds_inmem_graph1/'
@@ -327,15 +326,15 @@ with tf.Session()  as sess:
         while True:
             
             # overall are 307, start 'testing' testing from START_TEST
-            START_TEST = 300
+            START_TEST = 200
             
             # Train run
             if i<START_TEST:
                 
                 try:
     #                _, G_current,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out, target_disparity_out, gt_ds_out = sess.run(
-                    _, G_current,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
-                        [
+                    train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
+                        [   merged,
                             G_opt,
                             G_loss,
                             out,
@@ -354,6 +353,7 @@ with tf.Session()  as sess:
                     
                     # save all for now as a test
                     #train_writer.add_summary(summary, i)
+                    #train_writer.add_summary(train_summary, i)
                     
                 except tf.errors.OutOfRangeError:
                     break                
@@ -362,7 +362,7 @@ with tf.Session()  as sess:
             else:
 
                 try:
-                    summary, G_current, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out = sess.run(
+                    test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out = sess.run(
                         [merged,
                          G_loss,
                          out,
@@ -377,13 +377,18 @@ with tf.Session()  as sess:
                          ],
                             feed_dict={lr:LR})
                     
+                    #test_writer.add_summary(test_summary, i)
+                    
                 except tf.errors.OutOfRangeError:
                     break
 
             i+=1
             
 #            print_time("%d:%d -> %f"%(epoch,i,G_current))
-        print_time("%d:%d -> %f"%(epoch,i,G_current))
+        train_writer.add_summary(train_summary, epoch)
+        test_writer.add_summary(test_summary, epoch)
+        
+        print_time("%d:%d -> %f"%(epoch,i,G_loss_trained))
      
      # Close writers
     train_writer.close()
@@ -392,176 +397,3 @@ with tf.Session()  as sess:
 
 print("All done")
 exit (0)
-
-
-
-
-
-filename_queue = tf.train.string_input_producer(
-    [train_filenameTFR], num_epochs = EPOCHS_TO_RUN) #0)
-
-# Even when reading in multiple threads, share the filename
-# queue.
-corr2d325, target_disparity, gt_ds = read_and_decode(filename_queue)
-
-# The op for initializing the variables.
-init_op = tf.group(tf.global_variables_initializer(),
-                   tf.local_variables_initializer())
-
-#sess = tf.Session()
-
-out =       network(corr2d325)
-
-#Try standard loss functions first
-G_loss, _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _cost1 = batchLoss(out_batch =         out,        # [batch_size,(1..2)] tf_result
-              target_disparity_batch=  target_disparity, ### target_d,   # [batch_size]        tf placeholder
-              gt_ds_batch =            gt_ds, ### gt,         # [batch_size,2]      tf placeholder
-              absolute_disparity =     ABSOLUTE_DISPARITY,
-              use_confidence =         USE_CONFIDENCE, # True, 
-              lambda_conf_avg =        0.01,
-              lambda_conf_pwr =        0.1,
-              conf_pwr =               2.0,
-              gt_conf_offset =         0.08,
-              gt_conf_pwr =            1.0)
-
-t_vars=tf.trainable_variables()
-lr=tf.placeholder(tf.float32)
-G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
-
-saver=tf.train.Saver()
-# ?!!!!!
-#merged = tf.summary.merge_all()
-#train_writer = tf.summary.FileWriter(result_dir + '/train', sess.graph)
-#test_writer = tf.summary.FileWriter(result_dir + '/test')
-
-#http://rtfcode.com/xref/tensorflow-1.4.1/tensorflow/docs_src/api_guides/python/reading_data.md
-with tf.Session()  as sess:
-    sess.run(tf.global_variables_initializer())
-    sess.run(tf.local_variables_initializer())
-#    sess.run(init_op) # Was reporting beta1 not initialized in Adam
-    
-    coord =   tf.train.Coordinator()
-    threads = tf.train.start_queue_runners(coord=coord)
-
-    writer = tf.summary.FileWriter('./attic/nn_ds_inmem_graph1', sess.graph)
-    writer.close()
-    
-#    for i in range(1000):
-    loss_hist = np.zeros(RUN_TOT_AVG, dtype=np.float32)
-    i = 0
-    try:
-        while not coord.should_stop():
-            print_time("%d: Run "%(i), end = "")
-            _,G_current,output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out, target_disparity_out, gt_ds_out = sess.run(
-                [G_opt,G_loss,out,_disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _cost1, corr2d325, target_disparity, gt_ds],
-                feed_dict={lr:       LR})
-#            print_time("loss=%f, running average=%f"%(G_current,mean_loss))
-            loss_hist[i % RUN_TOT_AVG] = G_current
-            if (i < RUN_TOT_AVG):
-                loss_avg = np.average(loss_hist[:i])
-            else:
-                loss_avg = np.average(loss_hist)
-            print_time("loss=%f, running average=%f"%(G_current,loss_avg))
-#            print ("%d: corr2d_out.shape="%(i),corr2d325_out.shape) 
-##            print ("target_disparity_out.shape=",target_disparity_out.shape) 
-##            print ("gt_ds_out.shape=",gt_ds_out.shape) 
-            i += 1
-    except tf.errors.OutOfRangeError:
-        print('Done training -- epoch limit reached')
-    finally:
-    # When done, ask the threads to stop.
-        coord.request_stop()                
-    coord.join(threads)
-#sess.close() ('whith' does that)
-
-
-
-
-
-
-
-
-
-
-    '''
-    
-    ckpt=tf.train.get_checkpoint_state(checkpoint_dir)
-    
-    if ckpt:
-      print('loaded '+ckpt.model_checkpoint_path)
-      saver.restore(sess,ckpt.model_checkpoint_path)
-    
-    
-    allfolders = glob.glob('./result/*0')
-    lastepoch = 0
-    for folder in allfolders:
-      lastepoch = np.maximum(lastepoch, int(folder[-4:]))
-    
-    recorded_loss = []
-    recorded_mean_loss = []
-    
-    recorded_gt_d = []
-    recorded_gt_c = []
-    
-    recorded_pr_d = []
-    recorded_pr_c = []
-    
-    LR = 1e-3
-    
-    print(bcolors.HEADER+"Last Epoch = "+str(lastepoch)+bcolors.ENDC)
-    
-    if DEBUG_PLT_LOSS:
-      plt.ion()   # something about plotting
-      plt.figure(1, figsize=(4,12))
-      pass
-    
-    
-    training_tiles  = np.array([])
-    training_values = np.array([])
-    
-    
-    
-    graph_saved = False
-    for epoch in range(20): #MAX_EPOCH):
-        print_time("epoch="+str(epoch))
-        train_seed_list = np.arange(len(ex_data.files_train))
-        np.random.shuffle(train_seed_list)
-        g_loss = np.zeros(len(train_seed_list))
-        for nscene, seed_index in enumerate(train_seed_list):
-            corr2d_batch, target_disparity_batch, gt_ds_batch = ex_data.prepareBatchData(seed_index)
-            num_tiles =         corr2d_batch.shape[0] # 1000
-            num_tile_slices =   corr2d_batch.shape[1] # 4
-            num_cell_in_slice = corr2d_batch.shape[2] # 81
-            in_data = np.empty((num_tiles, num_tile_slices*num_cell_in_slice + 1), dtype = np.float32)
-            in_data[...,0:num_tile_slices*num_cell_in_slice] = corr2d_batch.reshape((corr2d_batch.shape[0],corr2d_batch.shape[1]*corr2d_batch.shape[2]))
-            in_data[...,num_tile_slices*num_cell_in_slice] =  target_disparity_batch
-            st=time.time()
-            
-            #run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
-            #run_metadata = tf.RunMetadata()
-            #_,G_current,output = sess.run([G_opt,G_loss,out],feed_dict={in_tile:input_patch,gt:gt_patch,lr:LR},options=run_options,run_metadata=run_metadata)
-    
-            print_time("%d:%d Run "%(epoch, nscene), end = "")
-            _,G_current,output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm = sess.run([G_opt,G_loss,out,_disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm],
-                                          feed_dict={in_tile:  in_data,
-                                                     gt:       gt_ds_batch,
-                                                     target_d: target_disparity_batch, 
-                                                     lr:       LR})
-            if not graph_saved:
-                writer = tf.summary.FileWriter('./attic/nn_ds_single_graph1', sess.graph)
-                writer.close()
-                graph_saved = True
-    #            exit(0)
-            
-            g_loss[nscene]=G_current
-            mean_loss = np.mean(g_loss[np.where(g_loss)])
-            print_time("loss=%f, running average=%f"%(G_current,mean_loss))
-            pass
-    ''' 
-
-
-
-
-#if wait_and_show: # wait and show images
-#    plt.show()
-print_time("All done, exiting...")   
