@@ -304,8 +304,8 @@ TRAIN_PATH = ROOT_PATH + 'train'
 TEST_PATH  = ROOT_PATH + 'test'
 
 # CLEAN OLD STAFF
-shutil.rmtree(TRAIN_PATH)
-shutil.rmtree(TEST_PATH)
+#shutil.rmtree(TRAIN_PATH)
+#shutil.rmtree(TEST_PATH)
 
 with tf.Session()  as sess:
     
