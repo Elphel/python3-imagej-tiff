@@ -32,7 +32,7 @@ FILES_PER_SCENE =    5 # number of random offset files for the scene to select f
 MAX_EPOCH =        500
 LR =               1e-4 # learning rate
 USE_CONFIDENCE =     False
-ABSOLUTE_DISPARITY = False
+ABSOLUTE_DISPARITY = True # False
 DEBUG_PLT_LOSS =     True
 FEATURES_PER_TILE =  324
 EPOCHS_TO_RUN =     10000 #0
@@ -122,63 +122,71 @@ except IndexError:
 #FILES_PER_SCENE
 
 
-print_time("Importing TensorCrawl")
+#print_time("Importing TensorCrawl")
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-print_time("TensorCrawl imported")
+#print_time("TensorCrawl imported")
 
 print_time("Importing training data... ", end="")
 corr2d_train, target_disparity_train, gt_ds_train = readTFRewcordsEpoch(train_filenameTFR)
 print_time("  Done")
+
+corr2d_train_placeholder =           tf.placeholder(corr2d_train.dtype,           (None,324)) # corr2d_train.shape)
+target_disparity_train_placeholder = tf.placeholder(target_disparity_train.dtype, (None,1))  #target_disparity_train.shape)
+gt_ds_train_placeholder =            tf.placeholder(gt_ds_train.dtype,            (None,2)) #gt_ds_train.shape)
+
 dataset_train = tf.data.Dataset.from_tensor_slices({
-    "corr2d":corr2d_train,
-    "target_disparity": target_disparity_train,
-    "gt_ds": gt_ds_train})
+    "corr2d":corr2d_train_placeholder,
+    "target_disparity": target_disparity_train_placeholder,
+    "gt_ds": gt_ds_train_placeholder})
 dataset_train_size = len(corr2d_train)
 print_time("dataset_train.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
 dataset_train = dataset_train.batch(BATCH_SIZE)
-dataset_train_size /= BATCH_SIZE
+dataset_train_size //= BATCH_SIZE
 print("dataset_train.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
 iterator_train = dataset_train.make_initializable_iterator()
 next_element_train = iterator_train.get_next()
 
-'''
 print_time("Importing test data... ", end="")
 corr2d_test, target_disparity_test, gt_ds_test = readTFRewcordsEpoch(test_filenameTFR)
 print_time("  Done")
+"""
 dataset_test =  tf.data.Dataset.from_tensor_slices({
     "corr2d":corr2d_test,
     "target_disparity": target_disparity_test,
     "gt_ds": gt_ds_test})
+
+"""
 dataset_test_size = len(corr2d_test)
-print_time("dataset_test.output_types "+str(dataset_test.output_types)+", dataset_test.output_shapes "+str(dataset_test.output_shapes)+", number of elements="+str(dataset_test_size))
-dataset_test =  dataset_test.batch(BATCH_SIZE)
-dataset_test_size /= BATCH_SIZE
-print("dataset_test.output_types "+str(dataset_test.output_types)+", dataset_test.output_shapes "+str(dataset_test.output_shapes)+", number of elements="+str(dataset_test_size))
+#print_time("dataset_test.output_types "+str(dataset_test.output_types)+", dataset_test.output_shapes "+str(dataset_test.output_shapes)+", number of elements="+str(dataset_test_size))
+#dataset_test =  dataset_test.batch(BATCH_SIZE)
+dataset_test_size //= BATCH_SIZE
+#print("dataset_test.output_types "+str(dataset_test.output_types)+", dataset_test.output_shapes "+str(dataset_test.output_shapes)+", number of elements="+str(dataset_test_size))
+"""
 iterator_test =  dataset_test.make_initializable_iterator()
 next_element_test =  iterator_test.get_next()
-'''
+"""
 #https://www.tensorflow.org/versions/r1.5/programmers_guide/datasets
 
-result_dir = './attic/result_inmem/'
-checkpoint_dir = './attic/result_inmem/'
+result_dir = './attic/result_inmem2/'
+checkpoint_dir = './attic/result_inmem2/'
 save_freq = 500
 
 def lrelu(x):
-    return tf.maximum(x*0.5,x)
+    return tf.maximum(x*0.2,x)
 #    return tf.nn.relu(x)
 
 def network(input):
 
-  fc1  = slim.fully_connected(input, 256, activation_fn=lrelu,scope='g_fc1')
-  fc2  = slim.fully_connected(fc1,   128, activation_fn=lrelu,scope='g_fc2')
+#  fc1  = slim.fully_connected(input, 256, activation_fn=lrelu,scope='g_fc1')
+#  fc2  = slim.fully_connected(fc1,   128, activation_fn=lrelu,scope='g_fc2')
 ##  fc3  =     slim.fully_connected(input, 256, activation_fn=lrelu,scope='g_fc3')
 ##  fc4  =     slim.fully_connected(fc3,   128, activation_fn=lrelu,scope='g_fc4')
 ##  fc5  =     slim.fully_connected(fc4,    64, activation_fn=lrelu,scope='g_fc5')
   
-  fc3  =     slim.fully_connected(fc2,    64, activation_fn=lrelu,scope='g_fc3')
+  fc3  =     slim.fully_connected(input,    32, activation_fn=lrelu,scope='g_fc3')
   fc4  =     slim.fully_connected(fc3,    20, activation_fn=lrelu,scope='g_fc4')
   fc5  =     slim.fully_connected(fc4,    16, activation_fn=lrelu,scope='g_fc5')
   
@@ -198,7 +206,8 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
               lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
-              gt_conf_pwr =            1.0):
+              gt_conf_pwr =            1.0,
+              error2_offset =          0.0025): # (0.05^2)
     with tf.name_scope("BatchLoss"):
         """
         Here confidence should be after relU. Disparity - may be also if absolute, but no activation if output is residual disparity
@@ -224,7 +233,7 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
             if gt_conf_pwr == 1.0:
                 w = w_clip
             else:
-                w=tf.pow(w_clip, tf_gt_conf_pwr, name = "w")
+                w=tf.pow(w_clip, tf_gt_conf_pwr, name = "w_pow")
     
         if use_confidence:
             tf_num_tilesf =      tf.cast(tf_num_tiles, dtype=tf.float32,     name="tf_num_tilesf")
@@ -267,13 +276,19 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
         
         cost1 =              tf.reduce_sum(out_wdiff2,                       name = "cost1")
         
+        out_diff2_offset =   tf.subtract(out_diff2, error2_offset,           name = "out_diff2_offset")
+        out_diff2_biased =   tf.maximum(out_diff2_offset, 0.0,               name = "out_diff2_biased")
+        out_diff2_wbiased =  tf.multiply(out_diff2_biased, w_norm,           name = "out_diff2_wbiased")
+        
+        cost1b =             tf.reduce_sum(out_diff2_wbiased,                name = "cost1b")
+        
         if use_confidence:
-            cost12 =         tf.add(cost1,  cost2,                           name = "cost12")
+            cost12 =         tf.add(cost1b, cost2,                           name = "cost12")
             cost123 =        tf.add(cost12, cost3,                           name = "cost123")    
             
             return cost123, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
         else:
-            return cost1, disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
+            return cost1b,  disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
     
 
 #corr2d325 = tf.concat([corr2d,target_disparity],0)
@@ -294,9 +309,10 @@ G_loss, _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _
               lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
-              gt_conf_pwr =            1.0)
+              gt_conf_pwr =            2.0)
 
 tf.summary.scalar("G_loss",G_loss)
+tf.summary.scalar("sq_diff",_cost1)
 
 t_vars=tf.trainable_variables()
 lr=tf.placeholder(tf.float32)
@@ -304,7 +320,7 @@ G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
 
 saver=tf.train.Saver()
 
-ROOT_PATH  = './attic/nn_ds_inmem_graph1/'
+ROOT_PATH  = './attic/nn_ds_inmem_graph2/'
 TRAIN_PATH = ROOT_PATH + 'train'
 TEST_PATH  = ROOT_PATH + 'test'
 
@@ -320,109 +336,77 @@ with tf.Session()  as sess:
     merged = tf.summary.merge_all()
     train_writer = tf.summary.FileWriter(TRAIN_PATH, sess.graph)
     test_writer  = tf.summary.FileWriter(TEST_PATH, sess.graph)
-    
+    loss_train_hist= np.empty(dataset_train_size, dtype=np.float32)
+    loss_test_hist=  np.empty(dataset_test_size, dtype=np.float32)
+    loss2_train_hist= np.empty(dataset_train_size, dtype=np.float32)
+    loss2_test_hist=  np.empty(dataset_test_size, dtype=np.float32)
     for epoch in range(EPOCHS_TO_RUN):
         
- #       if SHUFFLE_EPOCH:
-        dataset_train = dataset_train.shuffle(buffer_size=10000)
-        sess.run(iterator_train.initializer)
-        
-        i=0
-        while True:
-            
-            # overall are 307, start 'testing' testing from START_TEST
-            START_TEST = 200
-            
-            # Train run
-            if i<START_TEST:
+#       if SHUFFLE_EPOCH:
+#        dataset_train = dataset_train.shuffle(buffer_size=10000)
+        sess.run(iterator_train.initializer, feed_dict={corr2d_train_placeholder: corr2d_train,
+                                                        target_disparity_train_placeholder: target_disparity_train,
+                                                        gt_ds_train_placeholder: gt_ds_train})
+        for i in range(dataset_train_size):
+            try:
+                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
+                    [   merged,
+                        G_opt,
+                        G_loss,
+                        out,
+                        _disp_slice,
+                        _d_gt_slice,
+                        _out_diff,
+                        _out_diff2,
+                        _w_norm,
+                        _out_wdiff2,
+                        _cost1,
+                        corr2d325,
+                    ],
+                    feed_dict={lr:LR})
                 
-                if (epoch <50) or (epoch > 100) :
-                    
-                    try:
-        #                _, G_current,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out, target_disparity_out, gt_ds_out = sess.run(
-                        train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
-                            [   merged,
-                                G_opt,
-                                G_loss,
-                                out,
-                                _disp_slice,
-                                _d_gt_slice,
-                                _out_diff,
-                                _out_diff2,
-                                _w_norm,
-                                _out_wdiff2,
-                                _cost1,
-                                corr2d325,
-        #                     target_disparity,
-        #                     gt_ds
-                            ],
-                            feed_dict={lr:LR})
-                        
-                        # save all for now as a test
-                        #train_writer.add_summary(summary, i)
-                        #train_writer.add_summary(train_summary, i)
-                        
-                    except tf.errors.OutOfRangeError:
-                        break
-                else:                
-                    try:
-        #                _, G_current,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out, target_disparity_out, gt_ds_out = sess.run(
-                        train_summary, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
-                            [   merged,
-#                                G_opt,
-                                G_loss,
-                                out,
-                                _disp_slice,
-                                _d_gt_slice,
-                                _out_diff,
-                                _out_diff2,
-                                _w_norm,
-                                _out_wdiff2,
-                                _cost1,
-                                corr2d325,
-        #                     target_disparity,
-        #                     gt_ds
-                            ],
-                            feed_dict={lr:LR})
-                        
-                        # save all for now as a test
-                        #train_writer.add_summary(summary, i)
-                        #train_writer.add_summary(train_summary, i)
-                        
-                    except tf.errors.OutOfRangeError:
-                        break
-             
-            # Test run
-            else:
-
-                try:
-                    test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out = sess.run(
-                        [merged,
-                         G_loss,
-                         out,
-                         _disp_slice,
-                         _d_gt_slice,
-                         _out_diff,
-                         _out_diff2,
-                         _w_norm,
-                         _out_wdiff2,
-                         _cost1,
-                         corr2d325,
-                         ],
-                            feed_dict={lr:LR})
-                    
-                    #test_writer.add_summary(test_summary, i)
-                    
-                except tf.errors.OutOfRangeError:
-                    break
-
-            i+=1
+                # save all for now as a test
+                #train_writer.add_summary(summary, i)
+                #train_writer.add_summary(train_summary, i)
+                loss_train_hist[i] =  G_loss_trained
+                loss2_train_hist[i] = out_cost1
+            except tf.errors.OutOfRangeError:
+                print("train done at step %d"%(i))
+                break
+        train_avg = np.average(loss_train_hist)     
+        train2_avg = np.average(loss2_train_hist)     
+        sess.run(iterator_train.initializer, feed_dict={corr2d_train_placeholder: corr2d_test,
+                                                        target_disparity_train_placeholder: target_disparity_test,
+                                                        gt_ds_train_placeholder: gt_ds_test})
+        for i in range(dataset_test_size):
+            try:
+                test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out = sess.run(
+                    [merged,
+                     G_loss,
+                     out,
+                     _disp_slice,
+                     _d_gt_slice,
+                     _out_diff,
+                     _out_diff2,
+                     _w_norm,
+                     _out_wdiff2,
+                     _cost1,
+                     corr2d325,
+                     ],
+                        feed_dict={lr:LR})
+                loss_test_hist[i] =  G_loss_tested
+                loss2_test_hist[i] = out_cost1
+            except tf.errors.OutOfRangeError:
+                print("test done at step %d"%(i))
+                break
             
 #            print_time("%d:%d -> %f"%(epoch,i,G_current))
+        test_avg =  np.average(loss_test_hist)     
+        test2_avg = np.average(loss2_test_hist)     
         train_writer.add_summary(train_summary, epoch)
         test_writer.add_summary(test_summary, epoch)
         
-        print_time("%d:%d -> %f"%(epoch,i,G_loss_trained))
+        print_time("%d:%d -> %f %f (%f %f)"%(epoch,i,train_avg, test_avg,train2_avg, test2_avg))
      
      # Close writers
     train_writer.close()
