@@ -395,9 +395,10 @@ class ExploreData:
             lst = []
             for i in range (self.hist_to_batch.max()+1):
                 lst.append([])
-#            bb1d = bb[findx].reshape(self.num_tiles)    
-            disp_var_tiles =   disp_var[findx].reshape(self.num_tiles)
-            disp_neibs_tiles = disp_neibs[findx].reshape(self.num_tiles)
+#            bb1d = bb[findx].reshape(self.num_tiles)
+            if use_neibs:    
+                disp_var_tiles =   disp_var[findx].reshape(self.num_tiles)
+                disp_neibs_tiles = disp_neibs[findx].reshape(self.num_tiles)
             for n, indx in enumerate(bb[findx].reshape(self.num_tiles)):
                 if indx >= 0:
                     if use_neibs:
@@ -718,10 +719,10 @@ if __name__ == "__main__":
       ml_subdir =   "ml"
 
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
-  RADIUS = 1
+  RADIUS = 0
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
   VARIANCE_THRESHOLD = 1.5
-  NUM_TRAIN_SETS = 2
+  NUM_TRAIN_SETS = 6
  
   if RADIUS == 0:
     BATCH_DISP_BINS = 20
