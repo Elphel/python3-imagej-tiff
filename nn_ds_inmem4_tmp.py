@@ -153,7 +153,8 @@ n_allowed_train_filesTFR = min(MAX_TRAIN_FILES_TFR,len(train_filesTFR))
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
 
-print_time("Importing training data... ", end="")
+#print_time("Importing training data... ", end="")
+print_time("Importing training data... ")
 
 corr2d_trains = [None]*n_allowed_train_filesTFR
 target_disparity_trains = [None]*n_allowed_train_filesTFR
@@ -162,7 +163,8 @@ gt_ds_trains = [None]*n_allowed_train_filesTFR
 # Load maximum files from the list
 for i in range(n_allowed_train_filesTFR):
     corr2d_trains[i], target_disparity_trains[i], gt_ds_trains[i] = readTFRewcordsEpoch(train_filesTFR[i])
-
+    print_time("Parsed "+train_filesTFR[i])
+    
 corr2d_train = corr2d_trains[0] 
 target_disparity_train = target_disparity_trains[0]
 gt_ds_train = gt_ds_trains[0]
@@ -446,6 +448,7 @@ with tf.Session()  as sess:
     for epoch in range(EPOCHS_TO_RUN):
         
         train_file_index = epoch%n_allowed_train_filesTFR
+        print("train_file_index: "+str(train_file_index))
         
         if epoch%10==0:
             
