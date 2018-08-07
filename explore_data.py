@@ -73,7 +73,7 @@ def readTFRewcordsEpoch(train_filename):
 
 class ExploreData:
     PATTERN = "*-DSI_COMBO.tiff"
-    ML_DIR = "ml"
+#    ML_DIR = "ml"
     ML_PATTERN = "*-ML_DATA-*.tiff"
 
     def getComboList(self, top_dir):
@@ -164,6 +164,7 @@ class ExploreData:
     def __init__(self,
                topdir_train,
                topdir_test,
+               ml_subdir,  
                debug_level =          0,
                disparity_bins =    1000,
                strength_bins =      100,
@@ -468,12 +469,10 @@ class ExploreData:
             
                
                 
-    def getMLList(self,flist=None):
-        if flist is None:
-            flist = self.files_train # train_list
+    def getMLList(self, ml_subdir, flist):
         ml_list = []
         for fn in flist:
-            ml_patt = os.path.join(os.path.dirname(fn), ExploreData.ML_DIR, ExploreData.ML_PATTERN)
+            ml_patt = os.path.join(os.path.dirname(fn), ml_subdir, ExploreData.ML_PATTERN)
             ml_list.append(glob.glob(ml_patt))
 ##        self.ml_list = ml_list
         return ml_list
@@ -709,9 +708,15 @@ if __name__ == "__main__":
       topdir_test = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/test"#test" #all/"
       
   try:
-      pathTFR = sys.argv[3]
+      pathTFR =     sys.argv[3]
   except IndexError:
       pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/tf"
+
+  try:
+      ml_subdir =   sys.argv[4]
+  except IndexError:
+      ml_subdir =   "ml"
+
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
   RADIUS = 1
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
@@ -736,6 +741,7 @@ if __name__ == "__main__":
   ex_data = ExploreData(
                topdir_train =         topdir_train,
                topdir_test =          topdir_test,
+               ml_subdir =            ml_subdir,
                debug_level =          1, #3, ##0, #3,
                disparity_bins =     200, #1000,
                strength_bins =      100,
@@ -800,8 +806,8 @@ if __name__ == "__main__":
       disp_var_test,  num_neibs_test =  None, None    
       disp_var_train, num_neibs_train = None, None    
   
-  ml_list_train=ex_data.getMLList(ex_data.files_train)
-  ml_list_test= ex_data.getMLList(ex_data.files_test)
+  ml_list_train=ex_data.getMLList(ml_subdir, ex_data.files_train)
+  ml_list_test= ex_data.getMLList(ml_subdir, ex_data.files_test)
 
   if RADIUS == 0 :
       list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
