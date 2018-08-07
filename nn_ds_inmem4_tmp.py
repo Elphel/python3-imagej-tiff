@@ -42,7 +42,7 @@ SHUFFLE_EPOCH =    True
 NET_ARCH =           3 # overwrite with argv?
 #DEBUG_PACK_TILES = True
 SUFFIX=str(NET_ARCH)+ (["R","A"][ABSOLUTE_DISPARITY])
-MAX_TRAIN_FILES_TFR = 1
+MAX_TRAIN_FILES_TFR = 4
 #http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
 class bcolors:
     HEADER = '\033[95m'
@@ -122,7 +122,7 @@ except IndexError:
 
 # if the path is a directory
 if os.path.isdir(train_filenameTFR):
-    train_filesTFR = glob.glob(train_filenameTFR+"/train_*.tfrecords")
+    train_filesTFR = glob.glob(train_filenameTFR+"/*train*.tfrecords")
     train_filenameTFR = train_filesTFR[0] 
 else:
     train_filesTFR = [train_filenameTFR]
