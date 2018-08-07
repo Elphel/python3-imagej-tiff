@@ -122,11 +122,12 @@ except IndexError:
 
 # if the path is a directory
 if os.path.isdir(train_filenameTFR):
-    train_filesTFR = glob.glob(train_filenameTFR+"/*train*.tfrecords")
+    train_filesTFR = glob.glob(train_filenameTFR+"/*train-*.tfrecords")
     train_filenameTFR = train_filesTFR[0] 
 else:
     train_filesTFR = [train_filenameTFR]
 
+train_filesTFR.sort()
 print("Train tfrecords: "+str(train_filesTFR))
      
 # tfrecords' paths for testing    
@@ -142,6 +143,7 @@ if os.path.isdir(test_filenameTFR):
 else:
     test_filesTFR = [test_filenameTFR]
 
+test_filesTFR.sort()
 print("Test tfrecords: "+str(test_filesTFR))
     
 # Now we are left with 2 lists - train and test list
