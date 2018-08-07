@@ -111,16 +111,34 @@ def read_and_decode(filename_queue):
 
 #http://adventuresinmachinelearning.com/introduction-tensorflow-queuing/
 
-#Main code
+# Main code
+
+# tfrecords' paths for training
 try:
     train_filenameTFR =  sys.argv[1]
 except IndexError:
     train_filenameTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train.tfrecords"
+
+# if the path is a directory
+if os.path.isdir(train_filenameTFR):
+    train_filesTFR = glob.glob(train_filenameTFR+"/train_*.tfrecords")
+    train_filenameTFR = train_filesTFR[0] 
+else:
+    train_filesTFR = [train_filenameTFR]
+     
+# tfrecords' paths for testing    
 try:
     test_filenameTFR =  sys.argv[2]
 except IndexError:
     test_filenameTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/test.tfrecords"
-#FILES_PER_SCENE
+
+# if the path is a directory
+if os.path.isdir(test_filenameTFR):
+    test_filesTFR = glob.glob(test_filenameTFR+"/test_*.tfrecords")
+    test_filenameTFR = test_filesTFR[0] 
+else:
+    test_filesTFR = [test_filenameTFR]
+    
 
 import tensorflow as tf
 import tensorflow.contrib.slim as slim
@@ -378,6 +396,8 @@ def read_new_tfrecord_file(filename,result):
     print("Loaded new tfrecord file: "+str(filename))
 
 tfrecord_filename = train_filenameTFR
+
+tfrecord_file_counter = 0 
 
 with tf.Session()  as sess:
     
