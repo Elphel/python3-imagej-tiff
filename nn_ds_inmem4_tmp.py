@@ -30,7 +30,8 @@ FILES_PER_SCENE =    5 # number of random offset files for the scene to select f
 #MIN_BATCH_CHOICES = 10 # minimal number of tiles in a file for each bin to select from 
 #MAX_BATCH_FILES =   10 #maximal number of files to use in a batch
 MAX_EPOCH =        500
-LR =               1e-4 # learning rate
+#LR =               1e-4 # learning rate
+LR =               1e-3 # learning rate
 USE_CONFIDENCE =     False
 ABSOLUTE_DISPARITY = False # True # False
 DEBUG_PLT_LOSS =     True
@@ -183,7 +184,7 @@ dataset_train_size = len(corr2d_train)
 print_time("dataset_train.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
 
 dataset_train = dataset_train.batch(BATCH_SIZE)
-#dataset_train = dataset_train.prefetch(BATCH_SIZE)
+dataset_train = dataset_train.prefetch(BATCH_SIZE)
 
 dataset_train_size //= BATCH_SIZE
 print("dataset_train.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
@@ -219,11 +220,17 @@ def network_fc_simple(input, arch = 0):
     fc = []
     for i, num_outs in enumerate (layout):
         if num_outs:
-           if fc:
-               inp = fc[-1]
-           else:
+            if fc:
+                inp = fc[-1]
+            else:
                inp = input
-           fc.append(slim.fully_connected(inp, num_outs, activation_fn=lrelu,scope='g_fc'+str(i)))    
+            
+            fc.append(slim.fully_connected(inp, num_outs, activation_fn=lrelu,scope='g_fc'+str(i)))
+            with tf.variable_scope('g_fc'+str(i)+'/fully_connected',reuse=tf.AUTO_REUSE):
+                w = tf.get_variable('weights',shape=[inp.shape[1],num_outs])
+                b = tf.get_variable('weights',shape=[inp.shape[1],num_outs])
+                tf.summary.histogram("weights",w)
+                tf.summary.histogram("biases",b)
     """
 #  fc1  = slim.fully_connected(input, 256, activation_fn=lrelu,scope='g_fc1')
 #  fc2  = slim.fully_connected(fc1,   128, activation_fn=lrelu,scope='g_fc2')
@@ -237,8 +244,21 @@ def network_fc_simple(input, arch = 0):
   
     if USE_CONFIDENCE:
         fc_out  = slim.fully_connected(fc[-1],     2, activation_fn=lrelu,scope='g_fc_out')
+        
+        with tf.variable_scope('g_fc_out',reuse=tf.AUTO_REUSE):
+            w = tf.get_variable('weights',shape=[fc[-1].shape[1],2])
+            b = tf.get_variable('biases',shape=[fc[-1].shape[1],2])
+            tf.summary.histogram("weights",w)
+            tf.summary.histogram("biases",b)
+            
     else:     
         fc_out  = slim.fully_connected(fc[-1],     1, activation_fn=None,scope='g_fc_out')
+        
+        with tf.variable_scope('g_fc_out',reuse=tf.AUTO_REUSE):
+            w = tf.get_variable('weights',shape=[fc[-1].shape[1],1])
+            b = tf.get_variable('biases',shape=[1])
+            tf.summary.histogram("weights",w)
+            tf.summary.histogram("biases",b)
         #If using residual disparity, split last layer into 2 or remove activation and add rectifier to confidence only  
     return fc_out
 
@@ -399,7 +419,8 @@ with tf.name_scope('epoch_average'):
 
 t_vars=tf.trainable_variables()
 lr=tf.placeholder(tf.float32)
-G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
+#G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
+G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(_cost1)
 
 saver=tf.train.Saver()
 
