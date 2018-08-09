@@ -377,18 +377,6 @@ class ExploreData:
         num_batch_tiles = np.empty((data_ds.shape[0],self.hist_to_batch.max()+1),dtype = int) 
         bb = self.getBB(data_ds)
         use_neibs = not ((disp_var is None) or (disp_neibs is None) or (min_var is None) or (max_var is None) or (min_neibs is None))
-        '''
-        bb = np.empty((data_ds.shape[0],data_ds.shape[1],data_ds.shape[2]),int)
-        for findx in range(data_ds.shape[0]):
-            ds = data_ds[findx]
-            gt = ds[...,1] > 0.0 # all true - check
-            db = (((ds[...,0] - self.disparity_min_clip)/disp_step).astype(int))*gt
-            sb = (((ds[...,1] - self.strength_min_clip)/ str_step).astype(int))*gt
-            np.clip(db, 0, self.disparity_bins-1, out = db)
-            np.clip(sb, 0, self.strength_bins-1, out = sb)
-            bb[findx] = (self.hist_to_batch[sb.reshape(self.num_tiles),db.reshape(self.num_tiles)])   .reshape(db.shape[0],db.shape[1]) + (gt -1)
-            pass
-        '''
         list_of_file_lists=[]
         for findx in range(data_ds.shape[0]):
             foffs = findx * self.num_tiles 
@@ -606,20 +594,33 @@ class ExploreData:
 #$        files_list = [self.files_train, self.files_test][test_set]
         seed_list = np.arange(len(files_list))
         np.random.shuffle(seed_list)
+        cluster_size = (2 * radius + 1) * (2 * radius + 1)
         for nscene, seed_index in enumerate(seed_list):
             corr2d_batch, target_disparity_batch, gt_ds_batch = ex_data.prepareBatchData(ml_list, seed_index, min_choices=None, max_files = None, ml_num = None, set_ds = set_ds, radius = radius)
             #shuffles tiles in a batch
-            tiles_in_batch = len(target_disparity_batch)
-            permut = np.random.permutation(tiles_in_batch)
-            corr2d_batch_shuffled =           corr2d_batch[permut].reshape((corr2d_batch.shape[0], corr2d_batch.shape[1]*corr2d_batch.shape[2]))
-            target_disparity_batch_shuffled = target_disparity_batch[permut].reshape((tiles_in_batch,1))
-            gt_ds_batch_shuffled =            gt_ds_batch[permut]
+#            tiles_in_batch = len(target_disparity_batch)
+            tiles_in_batch =    corr2d_batch.shape[0]
+            clusters_in_batch = tiles_in_batch // cluster_size
+#            permut = np.random.permutation(tiles_in_batch)
+            permut = np.random.permutation(clusters_in_batch)
+            corr2d_clusters =           corr2d_batch.          reshape((clusters_in_batch,-1)) 
+            target_disparity_clusters = target_disparity_batch.reshape((clusters_in_batch,-1)) 
+            gt_ds_clusters =            gt_ds_batch.           reshape((clusters_in_batch,-1)) 
+                
+#            corr2d_batch_shuffled =           corr2d_batch[permut].reshape((corr2d_batch.shape[0], corr2d_batch.shape[1]*corr2d_batch.shape[2]))
+#            target_disparity_batch_shuffled = target_disparity_batch[permut].reshape((tiles_in_batch,1))
+#            gt_ds_batch_shuffled =            gt_ds_batch[permut]
+
+            corr2d_batch_shuffled =           corr2d_clusters[permut].          reshape((tiles_in_batch, -1))
+            target_disparity_batch_shuffled = target_disparity_clusters[permut].reshape((tiles_in_batch, -1))
+            gt_ds_batch_shuffled =            gt_ds_clusters[permut].           reshape((tiles_in_batch, -1))
+            
             if nscene == 0:
                 dtype_feature_corr2d =   _dtype_feature(corr2d_batch_shuffled)
                 dtype_target_disparity = _dtype_feature(target_disparity_batch_shuffled)
                 dtype_feature_gt_ds =    _dtype_feature(gt_ds_batch_shuffled)
+
             for i in range(tiles_in_batch):
-                
                 x = corr2d_batch_shuffled[i].astype(np.float32)
                 y = target_disparity_batch_shuffled[i].astype(np.float32)
                 z = gt_ds_batch_shuffled[i].astype(np.float32)
@@ -629,7 +630,7 @@ class ExploreData:
                 example = tf.train.Example(features=tf.train.Features(feature=d_feature))
                 writer.write(example.SerializeToString())
             if (self.debug_level > 0):
-                print("Scene %d of %d"%(nscene, len(seed_list)))        
+                print("Scene %d of %d -> %s"%(nscene, len(seed_list), tfr_filename))        
         writer.close()
         sys.stdout.flush()        
     
