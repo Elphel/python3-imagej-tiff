@@ -74,8 +74,10 @@ def readTFRewcordsEpoch(train_filename):
 class ExploreData:
     PATTERN = "*-DSI_COMBO.tiff"
 #    ML_DIR = "ml"
-    ML_PATTERN = "*-ML_DATA-*.tiff"
-
+    ML_PATTERN = "*-ML_DATA*.tiff"
+    """
+1527182801_296892-ML_DATARND-32B-O-FZ0.05-OFFS-0.20000_0.20000.tiff
+    """
     def getComboList(self, top_dir):
 #        patt = "*-DSI_COMBO.tiff"
         tlist = []
@@ -720,10 +722,10 @@ if __name__ == "__main__":
       ml_subdir =   "ml"
 
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
-  RADIUS = 0
+  RADIUS = 1
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
   VARIANCE_THRESHOLD = 1.5
-  NUM_TRAIN_SETS = 6
+  NUM_TRAIN_SETS = 8
  
   if RADIUS == 0:
     BATCH_DISP_BINS = 20
