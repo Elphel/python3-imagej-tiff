@@ -586,6 +586,7 @@ class ExploreData:
         if not  '.tfrecords' in tfr_filename:
             tfr_filename += '.tfrecords'
 
+        tfr_filename.replace(' ','_')
         if files_list is None:
             files_list = self.files_train
             
@@ -714,7 +715,7 @@ if __name__ == "__main__":
   try:
       pathTFR =     sys.argv[3]
   except IndexError:
-      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/tf"
+      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3/"
 
   try:
       ml_subdir =   sys.argv[4]
@@ -824,7 +825,7 @@ if __name__ == "__main__":
       pass
 #  ex_data.makeBatchLists(data_ds = ex_data.train_ds)
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d"%(train_var,))
+          fpath =  train_filenameTFR+("%03d"%(train_var,))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds)
           
       list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
@@ -849,7 +850,7 @@ if __name__ == "__main__":
       num_le_train = num_batch_tiles_train.sum()
       print("Number of <= %f disparity variance tiles: %d (train)"%(VARIANCE_THRESHOLD, num_le_train))
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d_R%d_LE%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
+          fpath =  train_filenameTFR+("%03d_R%d_LE%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
 
       list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
@@ -863,7 +864,7 @@ if __name__ == "__main__":
       high_fract_train = 1.0 * num_gt_train / (num_le_train + num_gt_train)
       print("Number of > %f disparity variance tiles: %d, fraction = %f (train)"%(VARIANCE_THRESHOLD, num_gt_train, high_fract_train))
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d_R%d_GT%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
+          fpath =  (train_filenameTFR+("%03d_R%d_GT%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD)))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
           
       # test
@@ -877,7 +878,7 @@ if __name__ == "__main__":
       num_le_test = num_batch_tiles_test.sum()
       print("Number of <= %f disparity variance tiles: %d (est)"%(VARIANCE_THRESHOLD, num_le_test))
 
-      fpath =  test_filenameTFR +("-TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+      fpath =  test_filenameTFR +("TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
       ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
 
       list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
@@ -890,7 +891,7 @@ if __name__ == "__main__":
       num_gt_test = num_batch_tiles_test.sum()
       high_fract_test = 1.0 * num_gt_test / (num_le_test + num_gt_test)
       print("Number of > %f disparity variance tiles: %d, fraction = %f (test)"%(VARIANCE_THRESHOLD, num_gt_test, high_fract_test))
-      fpath =  test_filenameTFR +("-TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+      fpath =  test_filenameTFR +("TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
       ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
   plt.show()
   
