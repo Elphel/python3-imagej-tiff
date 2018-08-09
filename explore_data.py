@@ -586,7 +586,7 @@ class ExploreData:
         if not  '.tfrecords' in tfr_filename:
             tfr_filename += '.tfrecords'
 
-        tfr_filename.replace(' ','_')
+        tfr_filename=tfr_filename.replace(' ','_')
         if files_list is None:
             files_list = self.files_train
             
@@ -715,7 +715,7 @@ if __name__ == "__main__":
   try:
       pathTFR =     sys.argv[3]
   except IndexError:
-      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3/"
+      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3a" #no trailing "/"
 
   try:
       ml_subdir =   sys.argv[4]
@@ -735,8 +735,8 @@ if __name__ == "__main__":
     BATCH_DISP_BINS = 8
     BATCH_STR_BINS =  3
 
-  train_filenameTFR = pathTFR+"-train"        
-  test_filenameTFR =  pathTFR+"-test"
+  train_filenameTFR = pathTFR+"/train"        
+  test_filenameTFR =  pathTFR+"/test"
 #        disp_bins = 20,
 #      str_bins=10)
 
