@@ -715,7 +715,7 @@ if __name__ == "__main__":
   try:
       pathTFR =     sys.argv[3]
   except IndexError:
-      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3a" #no trailing "/"
+      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
 
   try:
       ml_subdir =   sys.argv[4]

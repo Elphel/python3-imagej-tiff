@@ -48,7 +48,7 @@ BATCH_SIZE =       2*1080//9 # == 120 Each batch of tiles has balanced D/S tiles
 SHUFFLE_EPOCH =    True
 NET_ARCH1 =          4# 3 # overwrite with argv?
 NET_ARCH2 =          0# 3 # overwrite with argv?
-ONLY_TILE =          4 # 4# None # (remove all but center tile data), put None here for normal operation)
+ONLY_TILE =          None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 
 
 #DEBUG_PACK_TILES = True
@@ -168,7 +168,9 @@ except IndexError:
 #FILES_PER_SCENE
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
 
-files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
+files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords"]
+"""
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-003_R1_LE_1.5.tfrecords",
@@ -176,11 +178,13 @@ files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-005_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-006_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-007_R1_LE_1.5.tfrecords"]
+"""
 #files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
 #                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords"]
 files_train_hvar = []
 
-file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/test-TEST_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+#file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/test-TEST_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
 file_test_hvar=     None # "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
 weight_hvar = 0.13
 weight_lvar = 1.0 - weight_hvar 
