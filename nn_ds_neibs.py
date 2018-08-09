@@ -168,24 +168,28 @@ except IndexError:
 #FILES_PER_SCENE
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
 
-files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords"]
-"""
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-003_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-004_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-005_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-006_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-007_R1_LE_1.5.tfrecords"]
-"""
-#files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
-#                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords"]
-files_train_hvar = []
+files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train000_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train001_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train002_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train003_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train004_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train005_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train006_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train007_R1_LE_1.5.tfrecords",
+                    ]
+files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train000_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train001_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train002_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train003_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train004_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train005_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train006_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train007_R1_GT_1.5.tfrecords",
+]
 
-#file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/test-TEST_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
-file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
-file_test_hvar=     None # "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+#file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/testTEST_R1_LE_1.5.tfrecords"
+file_test_hvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/testTEST_R1_GT_1.5.tfrecords" # None # "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
 weight_hvar = 0.13
 weight_lvar = 1.0 - weight_hvar 
 
@@ -253,17 +257,28 @@ if (file_test_hvar):
     reformat_to_clusters([dataset_test_hvar])
     print_time("  Done")
 pass    
-    
-    
-"""
-corr2d_trains =           [corr2d_train,            corr2d_train1] 
-target_disparity_trains = [target_disparity_train,  target_disparity_train1] 
-gt_ds_trains =            [gt_ds_train,             gt_ds_train1] 
 
-corr2d_train_placeholder =           tf.placeholder(corr2d_train.dtype,           (None,FEATURES_PER_TILE)) # corr2d_train.shape)
-target_disparity_train_placeholder = tf.placeholder(target_disparity_train.dtype, (None,1))  #target_disparity_train.shape)
-gt_ds_train_placeholder =            tf.placeholder(gt_ds_train.dtype,            (None,2)) #gt_ds_train.shape)
-"""
+#Alternate lvar/hvar
+datasets_train = []
+datasets_weights_train = []
+for indx in range(max(len(datasets_train_lvar),len(datasets_train_hvar))):
+    if (indx < len(datasets_train_lvar)):
+        datasets_train.append(datasets_train_lvar[indx])
+        datasets_weights_train.append(weight_lvar)
+    if (indx < len(datasets_train_hvar)):
+        datasets_train.append(datasets_train_hvar[indx])
+        datasets_weights_train.append(weight_hvar)
+
+datasets_test = []
+datasets_weights_test = []
+if (file_test_lvar):
+    datasets_test.append(dataset_test_lvar)
+    datasets_weights_test.append(weight_lvar)
+if (file_test_hvar):
+    datasets_test.append(dataset_test_hvar)
+    datasets_weights_test.append(weight_hvar)
+
+    
 corr2d_train_placeholder =           tf.placeholder(datasets_train_lvar[0]['corr2d'].dtype,           (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
 target_disparity_train_placeholder = tf.placeholder(datasets_train_lvar[0]['target_disparity'].dtype, (None,1 *   cluster_size))  #target_disparity_train.shape)
 gt_ds_train_placeholder =            tf.placeholder(datasets_train_lvar[0]['gt_ds'].dtype,            (None,2 *   cluster_size)) #gt_ds_train.shape)
@@ -461,24 +476,13 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
         iw_sum =             tf.divide(tf_1f, w_sum,                         name = "iw_sum")
         w_norm =             tf.multiply (w_all, iw_sum,                     name = "w_norm")
         
-    #    disp_slice =         tf.slice(out_batch,[0,0],[-1,1],                name = "disp_slice")
-    #    d_gt_slice =         tf.slice(gt_ds_batch,[0,0],[-1,1],              name = "d_gt_slice")
         disp_slice =         tf.reshape(out_batch[:,0],[-1],                 name = "disp_slice")
         d_gt_slice =         tf.reshape(gt_ds_batch[:,0],[-1],               name = "d_gt_slice")
         
-        """
-        if absolute_disparity:
-            out_diff =       tf.subtract(disp_slice, d_gt_slice,             name = "out_diff")
-        else:
-            td_flat =        tf.reshape(target_disparity_batch,[-1],         name = "td_flat")
-            residual_disp =  tf.subtract(d_gt_slice, td_flat,                name = "residual_disp")
-            out_diff =       tf.subtract(disp_slice, residual_disp,          name = "out_diff")
-        """    
         td_flat =        tf.reshape(target_disparity_batch,[-1],         name = "td_flat")
         if absolute_disparity:
             adisp =          disp_slice
         else:
-#            td_flat =        tf.reshape(target_disparity_batch,[-1],         name = "td_flat")
             adisp =          tf.add(disp_slice, td_flat,                     name = "adisp")
         out_diff =           tf.subtract(adisp, d_gt_slice,                  name = "out_diff")
             
@@ -610,21 +614,16 @@ with tf.Session()  as sess:
     gtvar_train_avg = 0.0
     gtvar_test_avg =  0.0
     
-    num_train_variants = len(files_train_lvar)
+#    num_train_variants = len(files_train_lvar)
+    num_train_variants = len(datasets_train)
     for epoch in range (EPOCHS_TO_RUN):
 #        file_index = (epoch // 20) % 2 
         file_index = epoch  % num_train_variants
         learning_rate = [LR,LR100][epoch >=100] 
-    #       if SHUFFLE_EPOCH:
-    #        dataset_tt = dataset_tt.shuffle(buffer_size=10000)
-        """
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder: corr2d_trains[file_index],
-                                                        target_disparity_train_placeholder: target_disparity_trains[file_index],
-                                                        gt_ds_train_placeholder: gt_ds_trains[file_index]})
-        """
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           datasets_train_lvar[file_index]['corr2d'],
-                                                     target_disparity_train_placeholder: datasets_train_lvar[file_index]['target_disparity'],
-                                                     gt_ds_train_placeholder:            datasets_train_lvar[file_index]['gt_ds']})
+
+        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           datasets_train[file_index]['corr2d'],
+                                                     target_disparity_train_placeholder: datasets_train[file_index]['target_disparity'],
+                                                     gt_ds_train_placeholder:            datasets_train[file_index]['gt_ds']})
         for i in range(dataset_train_size):
             try:
 #                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
@@ -658,47 +657,37 @@ with tf.Session()  as sess:
         train2_avg =      np.average(loss2_train_hist).astype(np.float32)
         gtvar_train_avg = np.average(gtvar_train_hist).astype(np.float32)
         
-#        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:train_avg, tf_ph_sq_diff:train2_avg})
-#tf_ph_G_loss = tf.placeholder(tf.float32,shape=None,name='G_loss_avg')
-#tf_ph_sq_diff = tf.placeholder(tf.float32,shape=None,name='sq_diff_avg')
-        """     
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder: corr2d_test,
-                                                        target_disparity_train_placeholder: target_disparity_test,
-                                                        gt_ds_train_placeholder: gt_ds_test})
-        """
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:   dataset_test_lvar['corr2d'],
-                                                target_disparity_train_placeholder: dataset_test_lvar['target_disparity'],
-                                                gt_ds_train_placeholder:            dataset_test_lvar['gt_ds']})
-
-        for i in range(dataset_test_size):
-            try:
-#                test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out = sess.run(
-                test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
-                    [merged,
-                     G_loss,
-                     out,
-                     _disp_slice,
-                     _d_gt_slice,
-                     _out_diff,
-                     _out_diff2,
-                     _w_norm,
-                     _out_wdiff2,
-                     _cost1,
-                     GT_variance
-#                     corr2d325,
-                     ],
-                        feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg})  # previous value of *_avg
-                loss_test_hist[i] =  G_loss_tested
-                loss2_test_hist[i] = out_cost1
-                gtvar_test_hist[i] = gt_variance
-            except tf.errors.OutOfRangeError:
-                print("test done at step %d"%(i))
-                break
-            
-#            print_time("%d:%d -> %f"%(epoch,i,G_current))
-        test_avg =  np.average(loss_test_hist).astype(np.float32)     
-        test2_avg = np.average(loss2_test_hist).astype(np.float32)
-        gtvar_test_avg = np.average(gtvar_test_hist).astype(np.float32)
+        for dataset_test in datasets_test:
+            sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:      dataset_test['corr2d'],
+                                                    target_disparity_train_placeholder: dataset_test['target_disparity'],
+                                                    gt_ds_train_placeholder:            dataset_test['gt_ds']})
+    
+            for i in range(dataset_test_size):
+                try:
+                    test_summary, G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
+                        [merged,
+                         G_loss,
+                         out,
+                         _disp_slice,
+                         _d_gt_slice,
+                         _out_diff,
+                         _out_diff2,
+                         _w_norm,
+                         _out_wdiff2,
+                         _cost1,
+                         GT_variance
+                         ],
+                            feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg})  # previous value of *_avg
+                    loss_test_hist[i] =  G_loss_tested
+                    loss2_test_hist[i] = out_cost1
+                    gtvar_test_hist[i] = gt_variance
+                except tf.errors.OutOfRangeError:
+                    print("test done at step %d"%(i))
+                    break
+                    
+                test_avg =  np.average(loss_test_hist).astype(np.float32)     
+                test2_avg = np.average(loss2_test_hist).astype(np.float32)
+                gtvar_test_avg = np.average(gtvar_test_hist).astype(np.float32)
              
 #        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg})
         
