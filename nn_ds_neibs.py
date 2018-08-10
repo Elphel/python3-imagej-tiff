@@ -33,7 +33,7 @@ MAX_EPOCH =        500
 LR =               1e-4 # learning rate
 LR100 =            1e-4
 USE_CONFIDENCE =     False
-ABSOLUTE_DISPARITY = True # False # True # False
+ABSOLUTE_DISPARITY = False # True # False # True # False
 DEBUG_PLT_LOSS =     True
 TILE_LAYERS =        4
 FILE_TILE_SIDE =     9
@@ -46,9 +46,9 @@ RUN_TOT_AVG =       100 # last batches to average. Epoch is 307 training  batche
 #BATCH_SIZE =       1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 BATCH_SIZE =       2*1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 SHUFFLE_EPOCH =    True
-NET_ARCH1 =          4# 3 # overwrite with argv?
-NET_ARCH2 =          0# 3 # overwrite with argv?
-ONLY_TILE =          None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
+NET_ARCH1 =          0 # 4 # 3 # overwrite with argv?
+NET_ARCH2 =          0 # 3 # overwrite with argv?
+ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 
 
 #DEBUG_PACK_TILES = True
@@ -87,24 +87,44 @@ def print_time(txt="",end="\n"):
 #reading to memory (testing)
 def readTFRewcordsEpoch(train_filename):
 #    filenames = [train_filename]
-#    dataset = tf.data.TFRecordDataset(filenames)
+#    dataset = tf.data.TFRecorDataset(filenames)
     if not  '.tfrecords' in train_filename:
         train_filename += '.tfrecords'
-    record_iterator = tf.python_io.tf_record_iterator(path=train_filename)
-    corr2d_list=[]
-    target_disparity_list=[]
-    gt_ds_list = []
-    for string_record in record_iterator:
-        example = tf.train.Example()
-        example.ParseFromString(string_record)
-        corr2d_list.append           (np.array(example.features.feature['corr2d'].float_list.value, dtype=np.float32))
-#        target_disparity_list.append(np.array(example.features.feature['target_disparity'].float_list.value[0], dtype=np.float32))
-        target_disparity_list.append (np.array(example.features.feature['target_disparity'].float_list.value, dtype=np.float32))
-        gt_ds_list.append            (np.array(example.features.feature['gt_ds'].float_list.value, dtype= np.float32))
+    npy_dir_name = "npy"
+    dirname = os.path.dirname(train_filename) 
+    npy_dir = os.path.join(dirname, npy_dir_name)
+    filebasename, file_extension = os.path.splitext(train_filename)
+    filebasename = os.path.basename(filebasename)
+    file_corr2d =           os.path.join(npy_dir,filebasename + '_corr2d.npy')
+    file_target_disparity = os.path.join(npy_dir,filebasename + '_target_disparity.npy')
+    file_gt_ds =            os.path.join(npy_dir,filebasename + '_gt_ds.npy')
+    if (os.path.exists(file_corr2d) and
+        os.path.exists(file_target_disparity) and
+        os.path.exists(file_gt_ds)):
+        corr2d=            np.load (file_corr2d)
+        target_disparity = np.load(file_target_disparity)
+        gt_ds =            np.load(file_gt_ds)
         pass
-    corr2d=            np.array(corr2d_list)
-    target_disparity = np.array(target_disparity_list)
-    gt_ds =            np.array(gt_ds_list)
+    else:     
+        record_iterator = tf.python_io.tf_record_iterator(path=train_filename)
+        corr2d_list=[]
+        target_disparity_list=[]
+        gt_ds_list = []
+        for string_record in record_iterator:
+            example = tf.train.Example()
+            example.ParseFromString(string_record)
+            corr2d_list.append           (np.array(example.features.feature['corr2d'].float_list.value, dtype=np.float32))
+    #        target_disparity_list.append(np.array(example.features.feature['target_disparity'].float_list.value[0], dtype=np.float32))
+            target_disparity_list.append (np.array(example.features.feature['target_disparity'].float_list.value, dtype=np.float32))
+            gt_ds_list.append            (np.array(example.features.feature['gt_ds'].float_list.value, dtype= np.float32))
+            pass
+        corr2d=            np.array(corr2d_list)
+        target_disparity = np.array(target_disparity_list)
+        gt_ds =            np.array(gt_ds_list)
+        np.save(file_corr2d,           corr2d)
+        np.save(file_target_disparity, target_disparity)
+        np.save(file_gt_ds,            gt_ds)
+        
     return corr2d, target_disparity, gt_ds   
 
 #from http://warmspringwinds.github.io/tensorflow/tf-slim/2016/12/21/tfrecords-guide/
@@ -157,6 +177,7 @@ def reduce_tile_size(datasets_data, num_tile_layers, reduced_tile_side):
 """
 Start of the main code
 """
+"""
 try:
     train_filenameTFR =  sys.argv[1]
 except IndexError:
@@ -167,29 +188,32 @@ except IndexError:
     test_filenameTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/test.tfrecords"
 #FILES_PER_SCENE
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
+"""
 
-files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train000_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train001_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train002_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train003_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train004_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train005_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train006_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train007_R1_LE_1.5.tfrecords",
+
+files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_rand2/train000_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train001_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train002_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train003_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train004_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train005_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train006_R1_LE_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train007_R1_LE_1.5.tfrecords",
                     ]
-files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train000_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train001_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train002_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train003_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train004_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train005_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train006_R1_GT_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/train007_R1_GT_1.5.tfrecords",
+files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_rand2/train000_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train001_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train002_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train003_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train004_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train005_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train006_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train007_R1_GT_1.5.tfrecords",
 ]
-
+#files_train_hvar = []
 #file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
-file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/testTEST_R1_LE_1.5.tfrecords"
-file_test_hvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3b/testTEST_R1_GT_1.5.tfrecords" # None # "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_rand2/testTEST_R1_LE_1.5.tfrecords"
+file_test_hvar=     "/home/eyesis/x3d_data/data_sets/tf_data_rand2/testTEST_R1_GT_1.5.tfrecords" # None # "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+#file_test_hvar=  None
 weight_hvar = 0.13
 weight_lvar = 1.0 - weight_hvar 
 
@@ -298,6 +322,7 @@ dataset_test_size //= BATCH_SIZE
 
 #print_time("dataset_tt.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
 dataset_tt = dataset_tt.batch(BATCH_SIZE)
+dataset_tt = dataset_tt.prefetch(BATCH_SIZE)
 iterator_tt = dataset_tt.make_initializable_iterator()
 next_element_tt = iterator_tt.get_next()
 #print("dataset_tt.output_types "+str(dataset_tt.output_types)+", dataset_tt.output_shapes "+str(dataset_tt.output_shapes)+", number of elements="+str(dataset_train_size))

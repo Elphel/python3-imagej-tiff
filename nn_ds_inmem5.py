@@ -113,6 +113,7 @@ def read_and_decode(filename_queue):
 #http://adventuresinmachinelearning.com/introduction-tensorflow-queuing/
 
 #Main code
+"""
 try:
     train_filenameTFR =  sys.argv[1]
 except IndexError:
@@ -121,17 +122,30 @@ try:
     test_filenameTFR =  sys.argv[2]
 except IndexError:
     test_filenameTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/test.tfrecords"
-#FILES_PER_SCENE
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
+"""    
+#FILES_PER_SCENE
 
-files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords"]
+files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_GT_1.5.tfrecords",
+                    
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-003_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-004_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-005_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-006_R1_GT_1.5.tfrecords",
+                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-007_R1_GT_1.5.tfrecords",
+                    ]
 
-files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
-                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords"]
+#files_train_hvar = ["/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-000_R1_LE_1.5.tfrecords",
+#                    "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-001_R1_LE_1.5.tfrecords"]
 
-file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
-file_test_hvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+files_train_hvar = []
+#file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+#file_test_hvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/train-002_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
+file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3/test-TEST_R1_GT_1.5.tfrecords"
+file_test_hvar=     None
+
 weight_hvar = 0.13
 weight_lvar = 1.0 - weight_hvar 
 
@@ -170,15 +184,6 @@ if (file_test_hvar):
                            "target_disparity":target_disparity,
                            "gt_ds":gt_ds}
     print_time("  Done")
-"""
-corr2d_trains =           [corr2d_train,            corr2d_train1] 
-target_disparity_trains = [target_disparity_train,  target_disparity_train1] 
-gt_ds_trains =            [gt_ds_train,             gt_ds_train1] 
-
-corr2d_train_placeholder =           tf.placeholder(corr2d_train.dtype,           (None,324)) # corr2d_train.shape)
-target_disparity_train_placeholder = tf.placeholder(target_disparity_train.dtype, (None,1))  #target_disparity_train.shape)
-gt_ds_train_placeholder =            tf.placeholder(gt_ds_train.dtype,            (None,2)) #gt_ds_train.shape)
-"""
 corr2d_train_placeholder =           tf.placeholder(datasets_train_lvar[0]['corr2d'].dtype,           (None,324)) # corr2d_train.shape)
 target_disparity_train_placeholder = tf.placeholder(datasets_train_lvar[0]['target_disparity'].dtype, (None,1))  #target_disparity_train.shape)
 gt_ds_train_placeholder =            tf.placeholder(datasets_train_lvar[0]['gt_ds'].dtype,            (None,2)) #gt_ds_train.shape)
@@ -198,6 +203,8 @@ dataset_test_size //= BATCH_SIZE
 
 #print_time("dataset_tt.output_types "+str(dataset_train.output_types)+", dataset_train.output_shapes "+str(dataset_train.output_shapes)+", number of elements="+str(dataset_train_size))
 dataset_tt = dataset_tt.batch(BATCH_SIZE)
+dataset_tt = dataset_tt.prefetch(BATCH_SIZE)
+
 iterator_tt = dataset_tt.make_initializable_iterator()
 next_element_tt = iterator_tt.get_next()
 #print("dataset_tt.output_types "+str(dataset_tt.output_types)+", dataset_tt.output_shapes "+str(dataset_tt.output_shapes)+", number of elements="+str(dataset_train_size))
@@ -441,11 +448,6 @@ with tf.Session()  as sess:
         file_index = epoch  % num_train_variants 
     #       if SHUFFLE_EPOCH:
     #        dataset_tt = dataset_tt.shuffle(buffer_size=10000)
-        """
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder: corr2d_trains[file_index],
-                                                        target_disparity_train_placeholder: target_disparity_trains[file_index],
-                                                        gt_ds_train_placeholder: gt_ds_trains[file_index]})
-        """
         sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           datasets_train_lvar[file_index]['corr2d'],
                                                         target_disparity_train_placeholder: datasets_train_lvar[file_index]['target_disparity'],
                                                         gt_ds_train_placeholder:            datasets_train_lvar[file_index]['gt_ds']})
@@ -480,11 +482,6 @@ with tf.Session()  as sess:
 #        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:train_avg, tf_ph_sq_diff:train2_avg})
 #tf_ph_G_loss = tf.placeholder(tf.float32,shape=None,name='G_loss_avg')
 #tf_ph_sq_diff = tf.placeholder(tf.float32,shape=None,name='sq_diff_avg')
-        """     
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder: corr2d_test,
-                                                        target_disparity_train_placeholder: target_disparity_test,
-                                                        gt_ds_train_placeholder: gt_ds_test})
-        """
         sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:   datasets_test_lvar['corr2d'],
                                                 target_disparity_train_placeholder: datasets_test_lvar['target_disparity'],
                                                 gt_ds_train_placeholder:            datasets_test_lvar['gt_ds']})
