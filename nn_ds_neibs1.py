@@ -29,7 +29,7 @@ STR_BATCH_BINS =    10 # Number of batch strength bins
 FILES_PER_SCENE =    5 # number of random offset files for the scene to select from (0 - use all available)
 #MIN_BATCH_CHOICES = 10 # minimal number of tiles in a file for each bin to select from 
 #MAX_BATCH_FILES =   10 #maximal number of files to use in a batch
-MAX_EPOCH =        500
+#MAX_EPOCH =        500
 LR =               1e-4 # learning rate
 LR100 =            1e-4
 USE_CONFIDENCE =     False
@@ -49,7 +49,7 @@ SHUFFLE_EPOCH =    True
 NET_ARCH1 =          6 #0 # 4 # 3 # overwrite with argv?
 NET_ARCH2 =          6 # 0 # 3 # overwrite with argv?
 ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
-
+ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements 
 
 #DEBUG_PACK_TILES = True
 SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY])
@@ -164,6 +164,42 @@ def reformat_to_clusters(datasets_data):
         rec['corr2d'] =           rec['corr2d'].reshape(          (rec['corr2d'].shape[0]//cluster_size,           rec['corr2d'].shape[1] * cluster_size)) 
         rec['target_disparity'] = rec['target_disparity'].reshape((rec['target_disparity'].shape[0]//cluster_size, rec['target_disparity'].shape[1] * cluster_size)) 
         rec['gt_ds'] =            rec['gt_ds'].reshape(           (rec['gt_ds'].shape[0]//cluster_size,            rec['gt_ds'].shape[1] * cluster_size))
+
+def zip_lvar_hvar(datasets_lvar_data, datasets_hvar_data, del_src = True):
+#    cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
+# Reformat input data
+
+    datasets_data = []
+#    for rec1, rec2 in zip(datasets_lvar_data, datasets_hvar_data):
+    for nrec in range(len(datasets_lvar_data)):
+        rec1 = datasets_lvar_data[nrec]
+        rec2 = datasets_hvar_data[nrec]
+        
+        rec = {'corr2d':           np.empty((rec1['corr2d'].shape[0]*2,rec1['corr2d'].shape[1]),dtype=np.float32),
+               'target_disparity': np.empty((rec1['target_disparity'].shape[0]*2,rec1['target_disparity'].shape[1]),dtype=np.float32),
+               'gt_ds':            np.empty((rec1['gt_ds'].shape[0]*2,rec1['gt_ds'].shape[1]),dtype=np.float32)}
+
+        rec['corr2d'][0::2] =           rec1['corr2d'] 
+        rec['corr2d'][1::2] =           rec2['corr2d'] 
+        
+        rec['target_disparity'][0::2] = rec1['target_disparity'] 
+        rec['target_disparity'][1::2] = rec2['target_disparity'] 
+
+        rec['gt_ds'][0::2] =            rec1['gt_ds'] 
+        rec['gt_ds'][1::2] =            rec2['gt_ds']
+#        if del_src:
+#            rec1['corr2d'] = None
+#            rec1['target_disparity'] = None
+#            rec1['gt_ds'] = None
+#            rec2['corr2d'] = None
+#            rec2['target_disparity'] = None
+#            rec2['gt_ds'] = None
+        if del_src:
+            datasets_lvar_data[nrec] = None
+            datasets_hvar_data[nrec] = None
+        datasets_data.append(rec)
+    return datasets_data    
+         
 
 # list of dictionaries  
 def reduce_tile_size(datasets_data, num_tile_layers, reduced_tile_side):
@@ -284,16 +320,28 @@ if (file_test_hvar):
     print_time("  Done")
 pass    
 
-#Alternate lvar/hvar
-datasets_train = []
-datasets_weights_train = []
-for indx in range(max(len(datasets_train_lvar),len(datasets_train_hvar))):
-    if (indx < len(datasets_train_lvar)):
-        datasets_train.append(datasets_train_lvar[indx])
-        datasets_weights_train.append(weight_lvar)
-    if (indx < len(datasets_train_hvar)):
-        datasets_train.append(datasets_train_hvar[indx])
-        datasets_weights_train.append(weight_hvar)
+"""
+datasets_train_lvar & datasets_train_hvar ( that will increase batch size and placeholders twice
+test has to have even original, batches will not zip - just use two batches for one big one
+"""
+
+
+
+
+if ZIP_LHVAR:
+    datasets_train = zip_lvar_hvar(datasets_train_lvar, datasets_train_hvar)
+    pass
+else:
+    #Alternate lvar/hvar
+    datasets_train = []
+    datasets_weights_train = []
+    for indx in range(max(len(datasets_train_lvar),len(datasets_train_hvar))):
+        if (indx < len(datasets_train_lvar)):
+            datasets_train.append(datasets_train_lvar[indx])
+            datasets_weights_train.append(weight_lvar)
+        if (indx < len(datasets_train_hvar)):
+            datasets_train.append(datasets_train_hvar[indx])
+            datasets_weights_train.append(weight_hvar)
 
 datasets_test = []
 datasets_weights_test = []
@@ -305,9 +353,9 @@ if (file_test_hvar):
     datasets_weights_test.append(weight_hvar)
 
     
-corr2d_train_placeholder =           tf.placeholder(datasets_train_lvar[0]['corr2d'].dtype,           (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
-target_disparity_train_placeholder = tf.placeholder(datasets_train_lvar[0]['target_disparity'].dtype, (None,1 *   cluster_size))  #target_disparity_train.shape)
-gt_ds_train_placeholder =            tf.placeholder(datasets_train_lvar[0]['gt_ds'].dtype,            (None,2 *   cluster_size)) #gt_ds_train.shape)
+corr2d_train_placeholder =           tf.placeholder(datasets_train[0]['corr2d'].dtype,           (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
+target_disparity_train_placeholder = tf.placeholder(datasets_train[0]['target_disparity'].dtype, (None,1 *   cluster_size))  #target_disparity_train.shape)
+gt_ds_train_placeholder =            tf.placeholder(datasets_train[0]['gt_ds'].dtype,            (None,2 *   cluster_size)) #gt_ds_train.shape)
 
 dataset_tt = tf.data.Dataset.from_tensor_slices({
     "corr2d":corr2d_train_placeholder,
@@ -317,7 +365,8 @@ dataset_tt = tf.data.Dataset.from_tensor_slices({
 
 #dataset_train_size = len(corr2d_train)
 
-dataset_train_size = len(datasets_train_lvar[0]['corr2d'])
+#dataset_train_size = len(datasets_train_lvar[0]['corr2d'])
+dataset_train_size = len(datasets_train[0]['corr2d'])
 dataset_train_size //= BATCH_SIZE
 dataset_test_size = len(dataset_test_lvar['corr2d'])
 dataset_test_size //= BATCH_SIZE
@@ -610,7 +659,7 @@ G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
 
 saver=tf.train.Saver()
 
-ROOT_PATH  = './attic/nn_ds_neibs_graph'+SUFFIX+"/"
+ROOT_PATH  = './attic/nn_ds_neibs1_graph'+SUFFIX+"/"
 TRAIN_PATH =  ROOT_PATH + 'train'
 TEST_PATH  =  ROOT_PATH + 'test'
 TEST_PATH1  = ROOT_PATH + 'test1'
