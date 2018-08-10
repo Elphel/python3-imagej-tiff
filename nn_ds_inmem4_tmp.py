@@ -239,7 +239,8 @@ def network_fc_simple(input, arch = 0):
                 if (i==3):
                     
                     # red border
-                    grid = tf.constant([255,100,100],dtype=tf.float32,name="GRID")
+                    grid = tf.constant([0.1,-0.1,-0.1],dtype=tf.float32,name="GRID")
+                    #grid = tf.constant([255,100,100],dtype=tf.float32,name="GRID")
                     
                     # (325,32)
                     wimg_1 = w
@@ -268,7 +269,7 @@ def network_fc_simple(input, arch = 0):
                             gtiles2 = tf.concat([gtiles1,tf.expand_dims(10*[grid],1)],axis=1)
                             tmp2.append(gtiles2)
                         
-                        ts = tf.concat(tmp2,axis=2)
+                        ts = tf.concat(tmp2,axis=1)
                         tmp1.append(ts)
                     
                     image_summary_op2 = tf.concat(tmp1,axis=0)
@@ -281,8 +282,9 @@ def network_fc_simple(input, arch = 0):
                     
                     #tf.summary.image("wimgo1",tf.reshape(wimgo1,[1,32*(9+1),(9+1)*4, 3]))
                     #tf.summary.image("wimgo2",tf.reshape(wimgo2,[1,32*(9+1),(9+1)*4, 3]))
-                    tf.summary.image("SWEIGTS",tf.reshape(gtiles2,[1,10,10,3]))
-                    tf.summary.image("WEIGTS",tf.reshape(image_summary_op2,[1,320,40,3]))
+                    #tf.summary.image("TILE",tf.reshape(gtiles2,[1,10,10,3]))
+                    #tf.summary.image("STRIPE",tf.reshape(ts,[1,10,40,3]))
+                    tf.summary.image("W8S",tf.reshape(image_summary_op2,[1,320,40,3]))
                     
                     # borders
                     #for mi in range(0,wimg_res.shape[0],10):
