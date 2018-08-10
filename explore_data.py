@@ -74,8 +74,10 @@ def readTFRewcordsEpoch(train_filename):
 class ExploreData:
     PATTERN = "*-DSI_COMBO.tiff"
 #    ML_DIR = "ml"
-    ML_PATTERN = "*-ML_DATA-*.tiff"
-
+    ML_PATTERN = "*-ML_DATA*.tiff"
+    """
+1527182801_296892-ML_DATARND-32B-O-FZ0.05-OFFS-0.20000_0.20000.tiff
+    """
     def getComboList(self, top_dir):
 #        patt = "*-DSI_COMBO.tiff"
         tlist = []
@@ -377,18 +379,6 @@ class ExploreData:
         num_batch_tiles = np.empty((data_ds.shape[0],self.hist_to_batch.max()+1),dtype = int) 
         bb = self.getBB(data_ds)
         use_neibs = not ((disp_var is None) or (disp_neibs is None) or (min_var is None) or (max_var is None) or (min_neibs is None))
-        '''
-        bb = np.empty((data_ds.shape[0],data_ds.shape[1],data_ds.shape[2]),int)
-        for findx in range(data_ds.shape[0]):
-            ds = data_ds[findx]
-            gt = ds[...,1] > 0.0 # all true - check
-            db = (((ds[...,0] - self.disparity_min_clip)/disp_step).astype(int))*gt
-            sb = (((ds[...,1] - self.strength_min_clip)/ str_step).astype(int))*gt
-            np.clip(db, 0, self.disparity_bins-1, out = db)
-            np.clip(sb, 0, self.strength_bins-1, out = sb)
-            bb[findx] = (self.hist_to_batch[sb.reshape(self.num_tiles),db.reshape(self.num_tiles)])   .reshape(db.shape[0],db.shape[1]) + (gt -1)
-            pass
-        '''
         list_of_file_lists=[]
         for findx in range(data_ds.shape[0]):
             foffs = findx * self.num_tiles 
@@ -596,6 +586,7 @@ class ExploreData:
         if not  '.tfrecords' in tfr_filename:
             tfr_filename += '.tfrecords'
 
+        tfr_filename=tfr_filename.replace(' ','_')
         if files_list is None:
             files_list = self.files_train
             
@@ -606,20 +597,33 @@ class ExploreData:
 #$        files_list = [self.files_train, self.files_test][test_set]
         seed_list = np.arange(len(files_list))
         np.random.shuffle(seed_list)
+        cluster_size = (2 * radius + 1) * (2 * radius + 1)
         for nscene, seed_index in enumerate(seed_list):
             corr2d_batch, target_disparity_batch, gt_ds_batch = ex_data.prepareBatchData(ml_list, seed_index, min_choices=None, max_files = None, ml_num = None, set_ds = set_ds, radius = radius)
             #shuffles tiles in a batch
-            tiles_in_batch = len(target_disparity_batch)
-            permut = np.random.permutation(tiles_in_batch)
-            corr2d_batch_shuffled =           corr2d_batch[permut].reshape((corr2d_batch.shape[0], corr2d_batch.shape[1]*corr2d_batch.shape[2]))
-            target_disparity_batch_shuffled = target_disparity_batch[permut].reshape((tiles_in_batch,1))
-            gt_ds_batch_shuffled =            gt_ds_batch[permut]
+#            tiles_in_batch = len(target_disparity_batch)
+            tiles_in_batch =    corr2d_batch.shape[0]
+            clusters_in_batch = tiles_in_batch // cluster_size
+#            permut = np.random.permutation(tiles_in_batch)
+            permut = np.random.permutation(clusters_in_batch)
+            corr2d_clusters =           corr2d_batch.          reshape((clusters_in_batch,-1)) 
+            target_disparity_clusters = target_disparity_batch.reshape((clusters_in_batch,-1)) 
+            gt_ds_clusters =            gt_ds_batch.           reshape((clusters_in_batch,-1)) 
+                
+#            corr2d_batch_shuffled =           corr2d_batch[permut].reshape((corr2d_batch.shape[0], corr2d_batch.shape[1]*corr2d_batch.shape[2]))
+#            target_disparity_batch_shuffled = target_disparity_batch[permut].reshape((tiles_in_batch,1))
+#            gt_ds_batch_shuffled =            gt_ds_batch[permut]
+
+            corr2d_batch_shuffled =           corr2d_clusters[permut].          reshape((tiles_in_batch, -1))
+            target_disparity_batch_shuffled = target_disparity_clusters[permut].reshape((tiles_in_batch, -1))
+            gt_ds_batch_shuffled =            gt_ds_clusters[permut].           reshape((tiles_in_batch, -1))
+            
             if nscene == 0:
                 dtype_feature_corr2d =   _dtype_feature(corr2d_batch_shuffled)
                 dtype_target_disparity = _dtype_feature(target_disparity_batch_shuffled)
                 dtype_feature_gt_ds =    _dtype_feature(gt_ds_batch_shuffled)
+
             for i in range(tiles_in_batch):
-                
                 x = corr2d_batch_shuffled[i].astype(np.float32)
                 y = target_disparity_batch_shuffled[i].astype(np.float32)
                 z = gt_ds_batch_shuffled[i].astype(np.float32)
@@ -629,7 +633,7 @@ class ExploreData:
                 example = tf.train.Example(features=tf.train.Features(feature=d_feature))
                 writer.write(example.SerializeToString())
             if (self.debug_level > 0):
-                print("Scene %d of %d"%(nscene, len(seed_list)))        
+                print("Scene %d of %d -> %s"%(nscene, len(seed_list), tfr_filename))        
         writer.close()
         sys.stdout.flush()        
     
@@ -711,7 +715,7 @@ if __name__ == "__main__":
   try:
       pathTFR =     sys.argv[3]
   except IndexError:
-      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/tf"
+      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
 
   try:
       ml_subdir =   sys.argv[4]
@@ -719,10 +723,10 @@ if __name__ == "__main__":
       ml_subdir =   "ml"
 
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
-  RADIUS = 0
+  RADIUS = 1
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
   VARIANCE_THRESHOLD = 1.5
-  NUM_TRAIN_SETS = 6
+  NUM_TRAIN_SETS = 8
  
   if RADIUS == 0:
     BATCH_DISP_BINS = 20
@@ -731,8 +735,8 @@ if __name__ == "__main__":
     BATCH_DISP_BINS = 8
     BATCH_STR_BINS =  3
 
-  train_filenameTFR = pathTFR+"-train"        
-  test_filenameTFR =  pathTFR+"-test"
+  train_filenameTFR = pathTFR+"/train"        
+  test_filenameTFR =  pathTFR+"/test"
 #        disp_bins = 20,
 #      str_bins=10)
 
@@ -821,7 +825,7 @@ if __name__ == "__main__":
       pass
 #  ex_data.makeBatchLists(data_ds = ex_data.train_ds)
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d"%(train_var,))
+          fpath =  train_filenameTFR+("%03d"%(train_var,))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds)
           
       list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
@@ -846,7 +850,7 @@ if __name__ == "__main__":
       num_le_train = num_batch_tiles_train.sum()
       print("Number of <= %f disparity variance tiles: %d (train)"%(VARIANCE_THRESHOLD, num_le_train))
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d_R%d_LE%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
+          fpath =  train_filenameTFR+("%03d_R%d_LE%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
 
       list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
@@ -860,7 +864,7 @@ if __name__ == "__main__":
       high_fract_train = 1.0 * num_gt_train / (num_le_train + num_gt_train)
       print("Number of > %f disparity variance tiles: %d, fraction = %f (train)"%(VARIANCE_THRESHOLD, num_gt_train, high_fract_train))
       for train_var in range (NUM_TRAIN_SETS):
-          fpath =  train_filenameTFR+("-%03d_R%d_GT%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
+          fpath =  (train_filenameTFR+("%03d_R%d_GT%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD)))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
           
       # test
@@ -874,7 +878,7 @@ if __name__ == "__main__":
       num_le_test = num_batch_tiles_test.sum()
       print("Number of <= %f disparity variance tiles: %d (est)"%(VARIANCE_THRESHOLD, num_le_test))
 
-      fpath =  test_filenameTFR +("-TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+      fpath =  test_filenameTFR +("TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
       ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
 
       list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
@@ -887,7 +891,7 @@ if __name__ == "__main__":
       num_gt_test = num_batch_tiles_test.sum()
       high_fract_test = 1.0 * num_gt_test / (num_le_test + num_gt_test)
       print("Number of > %f disparity variance tiles: %d, fraction = %f (test)"%(VARIANCE_THRESHOLD, num_gt_test, high_fract_test))
-      fpath =  test_filenameTFR +("-TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+      fpath =  test_filenameTFR +("TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
       ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
   plt.show()
   
