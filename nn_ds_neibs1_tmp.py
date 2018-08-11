@@ -492,9 +492,9 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 block_side = math.ceil(math.sqrt(block_size))
                 
                 # if side^2 > size - need to expand with something
-                need_expanding = False 
+                missing_in_block = 0
                 if math.pow(block_side,2)>block_size:
-                    need_expanding = True
+                    missing_in_block = math.pow(block_side,2) - block_size
                 
                 tmp1 = []
                 for i in range(layout[index]):
@@ -502,9 +502,14 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                     for j in range(blocks_number):
                         si = (j+0)*block_size
                         ei = (j+1)*block_size
-                        # add expanding somewhere here:
-                        # ...
-                        tile = tf.reshape(wt[i,si:ei],shape=(block_side,block_side))
+                        
+                        # wtm is expanded... only tested for 0
+                        if missing_in_block!=0:
+                            wtm = tf.concat(wt[i,si:ei],missing_in_block*[tf.reduce_min(w)])
+                        else:
+                            wtm = wt[i,si:ei]
+                            
+                        tile = tf.reshape(wtm,shape=(block_side,block_side))
                         # stack to RGB
                         tiles = tf.stack([tile]*3,axis=2)
                         tiles = tf.concat([tiles, tf.expand_dims((block_side+0)*[grid],0)],axis=0)
