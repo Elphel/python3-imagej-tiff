@@ -488,7 +488,10 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
             
             if index==l1:
                 
-                grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # red - the values will be automapped to 0-255 range
+                # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # yellow - the values will be automapped to 0-255 range
+                grid = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
                 
                 wt = tf.transpose(w,[1,0])
                 
