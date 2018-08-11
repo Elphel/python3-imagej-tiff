@@ -70,6 +70,45 @@ def readTFRewcordsEpoch(train_filename):
     gt_ds =            np.array(gt_ds_list)
     return corr2d, target_disparity, gt_ds   
 
+def writeTFRewcordsImageTiles(img_path, tfr_filename): # test_set=False):
+#        train_filename = 'train.tfrecords'  # address to save the TFRecords file
+      # open the TFRecords file
+      num_tiles = 242*324 # fixme
+      all_image_tiles = np.array(range(num_tiles))
+      corr_layers =  ['hor-pairs', 'vert-pairs','diagm-pair', 'diago-pair']
+      img =          ijt.imagej_tiff(test_corr, corr_layers, all_image_tiles)
+
+      corr2d =           img.corr2d.reshape((num_tiles,-1))
+      target_disparity = img.target_disparity.reshape((num_tiles,-1))
+      gt_ds =            img.gt_ds.reshape((num_tiles,-1))
+
+      if not  '.tfrecords' in tfr_filename:
+          tfr_filename += '.tfrecords'
+
+      tfr_filename=tfr_filename.replace(' ','_')
+      try:
+          os.makedirs(os.path.dirname(tfr_filename))
+      except:
+          pass     
+          
+      writer = tf.python_io.TFRecordWriter(tfr_filename)
+      dtype_feature_corr2d =   _dtype_feature(corr2d)
+      dtype_target_disparity = _dtype_feature(target_disparity)
+      dtype_feature_gt_ds =    _dtype_feature(gt_ds)
+      for i in range(num_tiles):
+          x = corr2d[i].astype(np.float32)
+          y = target_disparity[i].astype(np.float32)
+          z = gt_ds[i].astype(np.float32)
+          d_feature = {'corr2d':          dtype_feature_corr2d(x),
+                       'target_disparity':dtype_target_disparity(y),
+                       'gt_ds':           dtype_feature_gt_ds(z)}
+          example = tf.train.Example(features=tf.train.Features(feature=d_feature))
+          writer.write(example.SerializeToString())
+          pass
+      writer.close()
+      sys.stdout.flush()        
+
+
 
 class ExploreData:
     PATTERN = "*-DSI_COMBO.tiff"
@@ -142,10 +181,6 @@ class ExploreData:
                 strength =  np.nan_to_num(strength, copy = False)  # likely should never happen
                 np.clip(disparity, disparity_min_clip, disparity_max_clip, out = disparity)
                 np.clip(strength, strength_min_clip, strength_max_clip, out = strength)
-#                if no_histogram:
-#                    strength *= good_tiles[ids]
-#            if no_histogram:
-#                return None # no histogram, just condition data
             good_tiles_list.append(good_tiles)
         combo_rds = np.concatenate(list_rds)
         hist, xedges, yedges = np.histogram2d( # xedges, yedges - just for debugging
@@ -157,8 +192,6 @@ class ExploreData:
             weights= np.concatenate(good_tiles_list).flatten())
         for i, combo_rds in enumerate(list_rds):
             for ids in range (combo_rds.shape[0]): #iterate over all scenes ds[2][rows][cols]
-#                strength =  combo_rds[ids][...,1]
-#                strength *= good_tiles_list[i][ids]
                 combo_rds[ids][...,1]*= good_tiles_list[i][ids]
         return hist, xedges, yedges
     
@@ -636,6 +669,9 @@ class ExploreData:
                 print("Scene %d of %d -> %s"%(nscene, len(seed_list), tfr_filename))        
         writer.close()
         sys.stdout.flush()        
+
+
+
     
     def showVariance(self,
             rds_list,           # list of disparity/strength files, suchas training, testing 
@@ -721,6 +757,20 @@ if __name__ == "__main__":
       ml_subdir =   sys.argv[4]
   except IndexError:
       ml_subdir =   "ml"
+      
+      
+      
+#  pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
+  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
+  scene = os.path.basename(test_corr)[:17]
+  scene_version= os.path.basename(os.path.dirname(os.path.dirname(test_corr)))
+  fname =scene+'-'+scene_version 
+  img_filenameTFR = os.path.join(pathTFR,'img',fname)        
+  writeTFRewcordsImageTiles(test_corr, img_filenameTFR)
+  
+  pass
+  
+  exit(0)
 
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
   RADIUS = 1
