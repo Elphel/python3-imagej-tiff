@@ -453,7 +453,9 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 
                 #grid = tf.constant([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)],dtype=tf.float32,name="GRID")
                 # red - the values will be automapped to 0-255 range
-                grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # yellow - the values will be automapped to 0-255 range
+                grid = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
                 
                 wt = tf.transpose(w,[1,0])
                 wt = wt[:,:-1]
@@ -464,6 +466,8 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                         si = (j+0)*TILE_SIZE
                         ei = (j+1)*TILE_SIZE
                         tile = tf.reshape(wt[i,si:ei],shape=(TILE_SIDE,TILE_SIDE))
+                        # color here?
+                        #tile = tf.cond()
                         # stack to RGB
                         tiles = tf.stack([tile]*3,axis=2)
                         tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+0)*[grid],0)],axis=0)
