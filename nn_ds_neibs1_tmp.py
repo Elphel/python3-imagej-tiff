@@ -588,8 +588,6 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                         tmp1.append(ts)
             
                 imsum2 = tf.concat(tmp1,axis=0)
-                print("imsum2 shape: ")
-                print(imsum2.shape)
                 tf.summary.image("inter_w8s",tf.reshape(imsum2,[1,layout[index]*cluster_side*(block_side+1)//4,4*cluster_side*(block_side+1),3]))
                 
                 
@@ -857,6 +855,9 @@ with tf.Session()  as sess:
 
     merged = tf.summary.merge_all()
     
+    vis_placeholder = tf.placeholder(tf.float32, [1,32,325,3])
+    some_image2 = tf.summary.image('custom_test', vis_placeholder)
+    
     l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
     l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
     with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
@@ -968,7 +969,24 @@ with tf.Session()  as sess:
 
 #        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg})
             
-        train_writer.add_summary(some_image.eval(), epoch)
+        #train_writer.add_summary(some_image.eval(), epoch)
+        l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
+        l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+        with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
+            w = tf.get_variable('weights',shape=[325,32])
+            wd = w[tf.newaxis,...]
+            wds = tf.stack([wd]*3,axis=-1)
+            
+            timg_min = tf.reduce_min(w).eval()
+            timg_max = tf.reduce_max(w).eval()
+            
+            timg = wds.eval()
+            
+            timg[:,:,:,0] = timg_min
+            timg[:,:,:,1] = timg_min
+            timg = np.transpose(timg,(0,2,1,3))
+            
+        train_writer.add_summary(some_image2.eval(feed_dict={vis_placeholder: timg}), epoch)
 
         train_writer.add_summary(train_summary, epoch)
         test_writer.add_summary(test_summaries[0], epoch)
