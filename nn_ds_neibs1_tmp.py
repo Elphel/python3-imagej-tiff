@@ -48,8 +48,8 @@ RUN_TOT_AVG =       100 # last batches to average. Epoch is 307 training  batche
 #BATCH_SIZE =       1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 BATCH_SIZE =       2*1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 SHUFFLE_EPOCH =    True
-NET_ARCH1 =          6 #0 # 4 # 3 # overwrite with argv?
-NET_ARCH2 =          6 # 0 # 3 # overwrite with argv?
+NET_ARCH1 =          0 #0 # 4 # 3 # overwrite with argv?
+NET_ARCH2 =          0 # 0 # 3 # overwrite with argv?
 ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements
 
@@ -249,6 +249,11 @@ files_train_hvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/
                     "/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train006_R1_GT_1.5.tfrecords",
                     "/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train007_R1_GT_1.5.tfrecords",
 ]
+
+files_train_lvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_LE_1.5.tfrecords",
+                    ]
+files_train_hvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_GT_1.5.tfrecords",
+]
 #files_train_hvar = []
 #file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
 file_test_lvar=     "/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/testTEST_R1_LE_1.5.tfrecords"
@@ -438,6 +443,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
     # lowest index
     l1 = layout.index(next(filter(lambda x: x!=0, layout)))
     
+    global test_op
     
     with tf.variable_scope(scope,reuse=tf.AUTO_REUSE):
         # histograms
@@ -446,6 +452,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
         tf.summary.histogram("weights",w)
         tf.summary.histogram("biases",b)
         # weights 2D pics
+        tmpvar = tf.get_variable('tmp_tile',shape=(TILE_SIDE,TILE_SIDE))
         
         if network_scope=='sub':
             # draw for the 1st layer
@@ -455,43 +462,67 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 # red - the values will be automapped to 0-255 range
                 # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 # yellow - the values will be automapped to 0-255 range
-                grid = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
+                grid_y = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
+                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 
                 wt = tf.transpose(w,[1,0])
                 wt = wt[:,:-1]
                 tmp1 = []
                 for i in range(layout[index]):
-                    tmp2 = []
+                    
+                    # reset when even
+                    if i%2==0: 
+                        tmp2 = []
+                    
                     for j in range(TILE_LAYERS):
                         si = (j+0)*TILE_SIZE
                         ei = (j+1)*TILE_SIZE
+                        
                         tile = tf.reshape(wt[i,si:ei],shape=(TILE_SIDE,TILE_SIDE))
-                        # color here?
-                        #tile = tf.cond()
-                        # stack to RGB
-                        tiles = tf.stack([tile]*3,axis=2)
-                        tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+0)*[grid],0)],axis=0)
-                        tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+1)*[grid],1)],axis=1)
+                        zers = tf.zeros(shape=(TILE_SIDE,TILE_SIDE))
+                        
+                        test_op = tmpvar.assign(tile)
+                        #tile = tmpvar
+                        
+                        tiles  = tf.stack([tile]*3,axis=2)
+                        
+                        # vertical border
+                        if (j==TILE_LAYERS-1):
+                            tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+0)*[grid_r],1)],axis=1)
+                        else:
+                            tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+0)*[grid_y],1)],axis=1)
+                        
+                        # horizontal border    
+                        tiles = tf.concat([tiles, tf.expand_dims((TILE_SIDE+1)*[grid_r],0)],axis=0)    
+                            
                         tmp2.append(tiles)
-                    ts = tf.concat(tmp2,axis=1)
-                    tmp1.append(ts)
+                        
+                    # concat when odd
+                    if i%2==1:
+                        ts = tf.concat(tmp2,axis=1)
+                        tmp1.append(ts)
                 
                 imsum1 = tf.concat(tmp1,axis=0)
-                tf.summary.image("sub_w8s",tf.reshape(imsum1,[1,layout[index]*(TILE_SIDE+1),TILE_LAYERS*(TILE_SIDE+1),3]))
+                imsum1_1 = tf.reshape(imsum1,[1,layout[index]*(TILE_SIDE+1)//2,2*TILE_LAYERS*(TILE_SIDE+1),3])
+
+                tf.summary.image("sub_w8s",imsum1_1)
+
                 # tests
                 #tf.summary.image("s_weights_test",tf.reshape(w,[1,w.shape[0],w.shape[1],1]))
                 #tf.summary.image("s_weights_test_transposed",tf.reshape(wt,[1,wt.shape[0],wt.shape[1],1]))
                 
         if network_scope=='inter':
             
-            blocks_number = int(math.pow(2*CLUSTER_RADIUS+1,2))
+            cluster_side = 2*CLUSTER_RADIUS+1
+            blocks_number = int(math.pow(cluster_side,2))
             
             if index==l1:
                 
                 # red - the values will be automapped to 0-255 range
                 # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 # yellow - the values will be automapped to 0-255 range
-                grid = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
+                grid_y = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
+                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 
                 wt = tf.transpose(w,[1,0])
                 
@@ -505,28 +536,61 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 
                 tmp1 = []
                 for i in range(layout[index]):
-                    tmp2 = []
-                    for j in range(blocks_number):
-                        si = (j+0)*block_size
-                        ei = (j+1)*block_size
+                    
+                    # reset when even
+                    if i%4==0: 
+                        tmp2 = []
+                    
+                    tmp4 = []
+                    # need to group these
+                    for j1 in range(cluster_side):
                         
-                        # wtm is expanded... only tested for 0
-                        if missing_in_block!=0:
-                            wtm = tf.concat(wt[i,si:ei],missing_in_block*[tf.reduce_min(w)])
-                        else:
+                        tmp3 = []
+                        
+                        for j2 in range(cluster_side):
+                            si = (cluster_side*j1+j2+0)*block_size
+                            ei = (cluster_side*j1+j2+1)*block_size                            
+                            
                             wtm = wt[i,si:ei]
                             
-                        tile = tf.reshape(wtm,shape=(block_side,block_side))
-                        # stack to RGB
-                        tiles = tf.stack([tile]*3,axis=2)
-                        tiles = tf.concat([tiles, tf.expand_dims((block_side+0)*[grid],0)],axis=0)
-                        tiles = tf.concat([tiles, tf.expand_dims((block_side+1)*[grid],1)],axis=1)
-                        tmp2.append(tiles)
-                    ts = tf.concat(tmp2,axis=1)
-                    tmp1.append(ts)
+                            tile = tf.reshape(wtm,shape=(block_side,block_side))
+                            # stack to RGB
+                            tiles = tf.stack([tile]*3,axis=2)
+                            
+                            # yellow first
+                            if j2==cluster_side-1:
+                                
+                                if j1==cluster_side-1:
+                                    tiles = tf.concat([tiles, tf.expand_dims((block_side+0)*[grid_r],0)],axis=0)
+                                else:
+                                    tiles = tf.concat([tiles, tf.expand_dims((block_side+0)*[grid_y],0)],axis=0)
+                                    
+                                tiles = tf.concat([tiles, tf.expand_dims((block_side+1)*[grid_r],1)],axis=1)
+                                
+                            else:
+                                
+                                tiles = tf.concat([tiles, tf.expand_dims((block_side+0)*[grid_y],1)],axis=1)
+                                
+                                if j1==cluster_side-1:
+                                    tiles = tf.concat([tiles, tf.expand_dims((block_side+1)*[grid_r],0)],axis=0)
+                                else:
+                                    tiles = tf.concat([tiles, tf.expand_dims((block_side+1)*[grid_y],0)],axis=0)
+                            
+                            tmp3.append(tiles)
+                            
+                        # hor
+                        tmp4.append(tf.concat(tmp3,axis=1))
+                        
+                    tmp2.append(tf.concat(tmp4,axis=0))
+                        
+                    if i%4==3:
+                        ts = tf.concat(tmp2,axis=1)
+                        tmp1.append(ts)
             
                 imsum2 = tf.concat(tmp1,axis=0)
-                tf.summary.image("inter_w8s",tf.reshape(imsum2,[1,layout[index]*(block_side+1),blocks_number*(block_side+1),3]))
+                print("imsum2 shape: ")
+                print(imsum2.shape)
+                tf.summary.image("inter_w8s",tf.reshape(imsum2,[1,layout[index]*cluster_side*(block_side+1)//4,4*cluster_side*(block_side+1),3]))
                 
                 
 
@@ -792,6 +856,17 @@ with tf.Session()  as sess:
     sess.run(tf.local_variables_initializer())
 
     merged = tf.summary.merge_all()
+    
+    l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
+    l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+    with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
+        w = tf.get_variable('weights',shape=[325,32])
+        wd = w[...,tf.newaxis]
+        wds = tf.stack([wd]*3,axis=0)
+        #print(wd.shape)
+        #some_image = tf.summary.image("tfsi_test",wds.eval(),max_outputs=1)
+        some_image = tf.summary.image("tfsi_test",wds,max_outputs=1)
+    
     train_writer =    tf.summary.FileWriter(TRAIN_PATH, sess.graph)
     test_writer  =    tf.summary.FileWriter(TEST_PATH, sess.graph)
     test_writer1  =   tf.summary.FileWriter(TEST_PATH1, sess.graph)
@@ -823,8 +898,8 @@ with tf.Session()  as sess:
         for i in range(dataset_train_size):
             try:
 #                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
-                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
-                    [   merged,
+                _, train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
+                    [   test_op, merged,
                         G_opt,
                         G_loss,
                         out,
@@ -846,6 +921,7 @@ with tf.Session()  as sess:
                 loss_train_hist[i] =  G_loss_trained
                 loss2_train_hist[i] = out_cost1
                 gtvar_train_hist[i] = gt_variance
+                
             except tf.errors.OutOfRangeError:
                 print("train done at step %d"%(i))
                 break
@@ -879,6 +955,9 @@ with tf.Session()  as sess:
                     loss_test_hist[i] =  G_loss_tested
                     loss2_test_hist[i] = out_cost1
                     gtvar_test_hist[i] = gt_variance
+                                            
+                    #    #print(str(wed.shape)+" "+str(wed[0,0])) 
+                    
                 except tf.errors.OutOfRangeError:
                     print("test done at step %d"%(i))
                     break
@@ -888,6 +967,8 @@ with tf.Session()  as sess:
                 gtvar_test_avg = np.average(gtvar_test_hist).astype(np.float32)
 
 #        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg})
+            
+        train_writer.add_summary(some_image.eval(), epoch)
 
         train_writer.add_summary(train_summary, epoch)
         test_writer.add_summary(test_summaries[0], epoch)
