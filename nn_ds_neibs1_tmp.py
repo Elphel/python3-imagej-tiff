@@ -250,10 +250,10 @@ files_train_hvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/
                     "/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train007_R1_GT_1.5.tfrecords",
 ]
 
-files_train_lvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_LE_1.5.tfrecords",
-                    ]
-files_train_hvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_GT_1.5.tfrecords",
-]
+#files_train_lvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_LE_1.5.tfrecords",
+#                    ]
+#files_train_hvar = ["/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/train000_R1_GT_1.5.tfrecords",
+#]
 #files_train_hvar = []
 #file_test_lvar=     "/home/eyesis/x3d_data/data_sets/tf_data_3x3a/train000_R1_LE_1.5.tfrecords" # "/home/eyesis/x3d_data/data_sets/train-000_R1_LE_1.5.tfrecords"
 file_test_lvar=     "/home/oleg/GIT/python3-imagej-tiff/data_sets/tf_data_rand2/testTEST_R1_LE_1.5.tfrecords"
@@ -855,19 +855,19 @@ with tf.Session()  as sess:
 
     merged = tf.summary.merge_all()
     
-    vis_placeholder = tf.placeholder(tf.float32, [1,32,325,3])
-    some_image2 = tf.summary.image('custom_test', vis_placeholder)
+    # display weights, part 1 begin
+    import numpy_image_test as nit
     
     l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
     l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
-    with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
-        w = tf.get_variable('weights',shape=[325,32])
-        wd = w[...,tf.newaxis]
-        wds = tf.stack([wd]*3,axis=0)
-        #print(wd.shape)
-        #some_image = tf.summary.image("tfsi_test",wds.eval(),max_outputs=1)
-        some_image = tf.summary.image("tfsi_test",wds,max_outputs=1)
     
+    wimg1_placeholder = tf.placeholder(tf.float32, [1,160,80,3])
+    wimg1 = tf.summary.image('weights/sub_'+str(l1), wimg1_placeholder)
+    
+    wimg2_placeholder = tf.placeholder(tf.float32, [1,120,60,3])
+    wimg2 = tf.summary.image('weights/inter_'+str(l2), wimg2_placeholder)
+    # display weights, part 1 end
+        
     train_writer =    tf.summary.FileWriter(TRAIN_PATH, sess.graph)
     test_writer  =    tf.summary.FileWriter(TEST_PATH, sess.graph)
     test_writer1  =   tf.summary.FileWriter(TEST_PATH1, sess.graph)
@@ -970,23 +970,27 @@ with tf.Session()  as sess:
 #        _,_=sess.run([tf_ph_G_loss,tf_ph_sq_diff],feed_dict={tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg})
             
         #train_writer.add_summary(some_image.eval(), epoch)
+        
+        # display weights, part 2 begin
         l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
         l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+        
         with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
-            w = tf.get_variable('weights',shape=[325,32])
-            wd = w[tf.newaxis,...]
-            wds = tf.stack([wd]*3,axis=-1)
+            w = tf.get_variable('weights',shape=[325,NN_LAYOUT1[l1]])
+            w = tf.transpose(w,(1,0))            
+            img1 = nit.tiles(nit.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
+            img1 = img1[np.newaxis,...]
             
-            timg_min = tf.reduce_min(w).eval()
-            timg_max = tf.reduce_max(w).eval()
+        train_writer.add_summary(wimg1.eval(feed_dict={wimg1_placeholder: img1}), epoch)
+
+        with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
+            w = tf.get_variable('weights',shape=[144,NN_LAYOUT1[l2]])
+            w = tf.transpose(w,(1,0))            
+            img2 = nit.tiles(nit.coldmap(w.eval(),zero_span=0.0002),(3,3,4,4),tiles_per_line=4,borders=True)
+            img2 = img2[np.newaxis,...]
             
-            timg = wds.eval()
-            
-            timg[:,:,:,0] = timg_min
-            timg[:,:,:,1] = timg_min
-            timg = np.transpose(timg,(0,2,1,3))
-            
-        train_writer.add_summary(some_image2.eval(feed_dict={vis_placeholder: timg}), epoch)
+        train_writer.add_summary(wimg2.eval(feed_dict={wimg2_placeholder: img2}), epoch)
+        # display weights, part 2 end
 
         train_writer.add_summary(train_summary, epoch)
         test_writer.add_summary(test_summaries[0], epoch)
