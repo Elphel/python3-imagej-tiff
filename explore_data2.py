@@ -113,7 +113,9 @@ def writeTFRewcordsImageTiles(img_path, tfr_filename): # test_set=False):
 class ExploreData:
     PATTERN = "*-DSI_COMBO.tiff"
 #    ML_DIR = "ml"
-    ML_PATTERN = "*-ML_DATA*.tiff"
+#    ML_PATTERN = "*-ML_DATA*OFFS*.tiff"
+    ML_PATTERN = "*-ML_DATA*MAIN*.tiff"
+#    ML_PATTERN = "*-ML_DATA*OFFS-0.20000_0.20000.tiff"
     """
 1527182801_296892-ML_DATARND-32B-O-FZ0.05-OFFS-0.20000_0.20000.tiff
     """
@@ -139,8 +141,9 @@ class ExploreData:
         images = []
         if (self.debug_level>2):
             print(str(resource.getrusage(resource.RUSAGE_SELF)))
+        layers =  ['disparity_rig','strength_rig','disparity_main']
         for combo_file in tlist:
-            tiff = ijt.imagej_tiff(combo_file,['disparity_rig','strength_rig'])
+            tiff = ijt.imagej_tiff(combo_file,layers)
             if not indx:
                 images = np.empty((len(tlist), tiff.image.shape[0],tiff.image.shape[1],tiff.image.shape[2]), tiff.image.dtype)
             images[indx] = tiff.image
@@ -162,6 +165,7 @@ class ExploreData:
             strength_min_clip =    0.1,
             strength_max_drop =    1.0,
             strength_max_clip =    0.9,
+            max_main_offset =      0.0,
             normalize =           True,
             no_histogram =        False            
             ):
@@ -176,7 +180,10 @@ class ExploreData:
                 good_tiles[ids] &= disparity <= disparity_max_drop
                 good_tiles[ids] &= strength >=  strength_min_drop
                 good_tiles[ids] &= strength <=  strength_max_drop
-                
+                if max_main_offset > 0.0:
+                    disparity_main = ds[...,2]
+                    good_tiles[ids] &= disparity_main <= (disparity + max_main_offset)
+                    good_tiles[ids] &= disparity_main >= (disparity - max_main_offset)
                 disparity = np.nan_to_num(disparity, copy = False) # to be able to multiply by 0.0 in mask | copy=False, then out=disparity all done in-place
                 strength =  np.nan_to_num(strength, copy = False)  # likely should never happen
                 np.clip(disparity, disparity_min_clip, disparity_max_clip, out = disparity)
@@ -199,7 +206,8 @@ class ExploreData:
     def __init__(self,
                topdir_train,
                topdir_test,
-               ml_subdir,  
+               ml_subdir,
+               max_main_offset =      2.0, # > 0.0 - do not use main camera tiles with offset more than this  
                debug_level =          0,
                disparity_bins =    1000,
                strength_bins =      100,
@@ -211,12 +219,14 @@ class ExploreData:
                strength_min_clip =    0.1,
                strength_max_drop =    1.0,
                strength_max_clip =    0.9,
+               
                hist_sigma =           2.0,  # Blur log histogram
                hist_cutoff=           0.001 #  of maximal  
                ):
     # file name
         self.debug_level = debug_level
         #self.testImageTiles()    
+        self.max_main_offset =    max_main_offset
         self.disparity_bins =     disparity_bins
         self.strength_bins =      strength_bins
         self.disparity_min_drop = disparity_min_drop
@@ -250,6 +260,7 @@ class ExploreData:
                 strength_min_clip =  self.strength_min_clip,
                 strength_max_drop =  self.strength_max_drop,
                 strength_max_clip =  self.strength_max_clip,
+                max_main_offset =    self.max_main_offset,
                 normalize =          True,
                 no_histogram =       False
            )
@@ -470,8 +481,9 @@ class ExploreData:
             all_choices.remove(findx)
             full_num_choices += self.num_batch_tiles[findx]
 
-        file_tiles_sparse = [[] for _ in set_ds] #list of empty lists for each train scene (will be sparse) 
-        for nt in range(self.num_batch_tiles.shape[1]): #number of tiles per batch (not counting ml file variant)
+        file_tiles_sparse = [[] for _ in set_ds] #list of empty lists for each train scene (will be sparse)
+         
+        for nt in range(self.num_batch_tiles.shape[1]): #number of tiles per batch (not counting ml file variant) // radius2 - 40
             tl = []
             nchoices = 0
             for findx in flist:
@@ -480,7 +492,29 @@ class ExploreData:
                 nchoices+= self.num_batch_tiles[findx][nt]
                 if nchoices >= min_choices: # use minimum of extra files
                     break;
+            while len(tl)==0:
+                print("** BUG! could not find a single candidate from files ",flist," for cell "+nt)
+                print("trying to use some other cell")
+                nt1 = np.random.randint(0,self.num_batch_tiles.shape[1])
+                for findx in flist:
+                    if (len(self.list_of_file_lists[findx][nt1])):
+                        tl.append(self.list_of_file_lists[findx][nt1])
+                    nchoices+= self.num_batch_tiles[findx][nt1]
+                    if nchoices >= min_choices: # use minimum of extra files
+                        break;
             tile = np.random.choice(np.concatenate(tl))
+            """
+Traceback (most recent call last):
+  File "explore_data2.py", line 1041, in <module>
+    ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
+  File "explore_data2.py", line 761, in writeTFRewcordsEpoch
+    corr2d_batch, target_disparity_batch, gt_ds_batch = ex_data.prepareBatchData(ml_list, seed_index, min_choices=None, max_files = None, ml_num = None, set_ds = set_ds, radius = radius)
+  File "explore_data2.py", line 556, in prepareBatchData
+    flist,tiles = self.augmentBatchFileIndices(seed_index, min_choices, max_files, set_ds)
+  File "explore_data2.py", line 494, in augmentBatchFileIndices
+    tile = np.random.choice(np.concatenate(tl))
+ValueError: need at least one array to concatenate
+            """
 #            print (nt, tile, tile//self.num_tiles, tile % self.num_tiles)
             if not type (tile) is np.int64:
                 print("tile=",tile)
@@ -544,7 +578,111 @@ class ExploreData:
         corr_layers =  ['hor-pairs', 'vert-pairs','diagm-pair', 'diago-pair']
         flist,tiles = self.augmentBatchFileIndices(seed_index, min_choices, max_files, set_ds)
         
-#        ml_all_files = self.getBatchData(flist, tiles, self.ml_list,  ml_num) # 0 - use all ml files for the scene, >0 select random number
+#        ml_all_files = self.getBatchData(flist, tiles, ml_list,  ml_num) # 0 - use all ml files for the scene, >0 select random number
+        ml_all_files = self.getBatchData(flist, tiles, ml_list,  0) # ml_num) # 0 - use all ml files for the scene, >0 select random number
+        if self.debug_level > 1:
+            print ("==============",seed_index, flist)
+            for i, findx in enumerate(flist):
+                print(i,"\n".join(ml_all_files[i])) 
+                print(tiles[i]) 
+        total_tiles = 0
+        for i, t in enumerate(tiles):
+##          total_tiles += len(t)*len(ml_all_files[i]) # tiles per scene * offset files per scene
+            total_tiles += len(t) # tiles per scene * offset files per scene
+        if self.debug_level > 1:
+            print("Tiles in the batch=",total_tiles)
+        corr2d_batch = None # np.empty((total_tiles, len(corr_layers),81))
+        gt_ds_batch =            np.empty((total_tiles * tiles_in_sample, 2), dtype=float) 
+        target_disparity_batch = np.empty((total_tiles * tiles_in_sample, ),  dtype=float) 
+        start_tile = 0
+        for nscene, scene_files in enumerate(ml_all_files):
+            '''
+            Create tiles list including neighbors
+            '''
+            full_tiles = np.empty([len(tiles[nscene]) * tiles_in_sample], dtype = int)
+            indx = 0;
+            for i, nt in enumerate(tiles[nscene]):
+                ty = nt // width
+                tx = nt % width
+                for dy in range (-radius, radius+1):
+                    y = np.clip(ty+dy,0,height_m1)
+                    for dx in range (-radius, radius+1):
+                        x = np.clip(tx+dx,0,width_m1)
+                        full_tiles[indx] = y * width + x
+                        indx += 1
+            """
+            Assign tiles to several correlation files
+            """
+            file_tiles = []
+            file_indices = []
+            for f in scene_files:
+                file_tiles.append([])
+            num_scene_files = len(scene_files)    
+            for t in full_tiles:
+                fi = np.random.randint(0, num_scene_files)
+                file_tiles[fi].append(t)
+                file_indices.append(fi)
+            corr2d_list =           []
+            target_disparity_list = []
+            gt_ds_list =            []
+            for fi, path in enumerate (scene_files):
+                img = ijt.imagej_tiff(path, corr_layers, tile_list=file_tiles[fi])
+                corr2d_list.append          (img.corr2d)
+                target_disparity_list.append(img.target_disparity)
+                gt_ds_list.append           (img.gt_ds)
+            img_indices = [0] * len(scene_files)
+            for i, fi in enumerate(file_indices):
+                ti = img_indices[fi]
+                img_indices[fi] += 1
+                if corr2d_batch is None:
+                    corr2d_batch = np.empty((total_tiles * tiles_in_sample, len(corr_layers), corr2d_list[fi].shape[-1]))
+                gt_ds_batch            [start_tile] = gt_ds_list[fi][ti]
+                target_disparity_batch [start_tile] = target_disparity_list[fi][ti]
+                corr2d_batch           [start_tile] = corr2d_list[fi][ti]
+                start_tile +=  1
+            """
+             Sometimes get bad tile in ML file that was not bad in COMBO-DSI
+             Need to recover
+             np.argwhere(np.isnan(target_disparity_batch))                 
+            """
+        bad_tiles = np.argwhere(np.isnan(target_disparity_batch))
+        if (len(bad_tiles)>0):
+            print ("*** Got %d bad tiles in a batch, no code to replace :-("%(len(bad_tiles)))
+            # for now - just repeat some good tile
+            """
+            for ibt in bad_tiles:
+                while np.isnan(target_disparity_batch[ibt]):
+                    irt = np.random.randint(0,total_tiles)
+                    if not np.isnan(target_disparity_batch[irt]):
+                        target_disparity_batch[ibt] = target_disparity_batch[irt]
+                        corr2d_batch[ibt] = corr2d_batch[irt]
+                        gt_ds_batch[ibt] = gt_ds_batch[irt]
+                        break
+            print (" done replacing")
+            """
+        self.corr2d_batch =           corr2d_batch
+        self.target_disparity_batch = target_disparity_batch
+        self.gt_ds_batch =            gt_ds_batch
+        return corr2d_batch, target_disparity_batch, gt_ds_batch
+
+    def prepareBatchDataOld(self, ml_list, seed_index, min_choices=None, max_files = None, ml_num = None, set_ds = None, radius = 0):
+        if min_choices is None:
+            min_choices = self.min_batch_choices
+        if max_files is None:
+            max_files = self.max_batch_files
+        if ml_num is None:
+            ml_num = self.files_per_scene
+        if set_ds is None:
+            set_ds = self.train_ds
+        tiles_in_sample = (2 * radius + 1) * (2 * radius + 1)
+        height = set_ds.shape[1]
+        width =  set_ds.shape[2]
+        width_m1 = width-1
+        height_m1 = height-1
+#        set_ds = [self.train_ds, self.test_ds][test_set]            
+        corr_layers =  ['hor-pairs', 'vert-pairs','diagm-pair', 'diago-pair']
+        flist,tiles = self.augmentBatchFileIndices(seed_index, min_choices, max_files, set_ds)
+        
         ml_all_files = self.getBatchData(flist, tiles, ml_list,  ml_num) # 0 - use all ml files for the scene, >0 select random number
         if self.debug_level > 1:
             print ("==============",seed_index, flist)
@@ -612,6 +750,8 @@ class ExploreData:
         self.target_disparity_batch = target_disparity_batch
         self.gt_ds_batch =            gt_ds_batch
         return corr2d_batch, target_disparity_batch, gt_ds_batch
+
+
 
     def writeTFRewcordsEpoch(self, tfr_filename, ml_list, files_list = None, set_ds= None, radius = 0): # test_set=False):
 #        train_filename = 'train.tfrecords'  # address to save the TFRecords file
@@ -763,7 +903,8 @@ if __name__ == "__main__":
       pathTFR =     sys.argv[3]
   except IndexError:
 #      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
-      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5" #no trailing "/"
+#      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5" #no trailing "/"
+      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_4" #no trailing "/"
 
   try:
       ml_subdir =   sys.argv[4]
@@ -771,20 +912,26 @@ if __name__ == "__main__":
 #      ml_subdir =   "ml"
       ml_subdir =   "mlr32_18a"
       
-  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
       
+#  pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
+#  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
+  test_corr = '/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527256816_150165/v02/mlr32_18a/1527256816_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
+#  test_corr = '/home/eyesis/x3d_data/models/dsi_combo_and_ml_all/state_street/1527256858_150165/v01/mlr32_18a/1527256858_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'  
   #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
   RADIUS = 2 # 5x5
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
   VARIANCE_THRESHOLD = 1.5
-  NUM_TRAIN_SETS = 8
+  NUM_TRAIN_SETS =     24 # 8
  
   if RADIUS == 0:
-    BATCH_DISP_BINS = 20
-    BATCH_STR_BINS =  10
-  else:
-    BATCH_DISP_BINS = 8
-    BATCH_STR_BINS =  3
+    BATCH_DISP_BINS = 50 # 1000 * 1
+    BATCH_STR_BINS =  20 # 10
+  elif RADIUS == 1:
+    BATCH_DISP_BINS = 15 # 120 * 9
+    BATCH_STR_BINS =  8
+  else: # RADIUS = 2
+    BATCH_DISP_BINS = 10 # 40 * 25
+    BATCH_STR_BINS =  4
 
   train_filenameTFR = pathTFR+"/train"        
   test_filenameTFR =  pathTFR+"/test"
@@ -847,14 +994,14 @@ if __name__ == "__main__":
                 num_neibs_list = [num_neibs_train, num_neibs_test],    # list of number of tile neibs files. Same shape(but last dim) as rds_list
                 variance_min =       0.0,
                 variance_max =       var_thresh,
-                neibs_min =          9)
+                neibs_min =          MIN_NEIBS)
            ex_data.showVariance(
                 rds_list =       [ex_data.train_ds, ex_data.test_ds],           # list of disparity/strength files, suchas training, testing 
                 disp_var_list =  [disp_var_train,  disp_var_test],      # list of disparity variance files. Same shape(but last dim) as rds_list
                 num_neibs_list = [num_neibs_train, num_neibs_test],    # list of number of tile neibs files. Same shape(but last dim) as rds_list
                 variance_min =       var_thresh,
                 variance_max =       1000.0,
-                neibs_min =          9)
+                neibs_min =          MIN_NEIBS)
            pass
       pass
       
@@ -891,67 +1038,70 @@ if __name__ == "__main__":
       pass
   else: # RADIUS > 0
       # train
-      list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
-          data_ds =      ex_data.train_ds,
-          disp_var =     disp_var_train,      # difference between maximal and minimal disparity for each scene, each tile
-          disp_neibs =   num_neibs_train,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
-          min_var =      0.0,                # Minimal tile variance to include
-          max_var =      VARIANCE_THRESHOLD, # Maximal tile variance to include
-          min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
-      num_le_train = num_batch_tiles_train.sum()
-      print("Number of <= %f disparity variance tiles: %d (train)"%(VARIANCE_THRESHOLD, num_le_train))
-      for train_var in range (NUM_TRAIN_SETS):
+      for train_var in range (NUM_TRAIN_SETS): # Recalculate list for each file - slower, but will alternate lvar/hvar
+          list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
+              data_ds =      ex_data.train_ds,
+              disp_var =     disp_var_train,      # difference between maximal and minimal disparity for each scene, each tile
+              disp_neibs =   num_neibs_train,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
+              min_var =      0.0,                # Minimal tile variance to include
+              max_var =      VARIANCE_THRESHOLD, # Maximal tile variance to include
+              min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
+          num_le_train = num_batch_tiles_train.sum()
+          print("Number of <= %f disparity variance tiles: %d (train)"%(VARIANCE_THRESHOLD, num_le_train))
+#      for train_var in range (NUM_TRAIN_SETS):
           fpath =  train_filenameTFR+("%03d_R%d_LE%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
 
-      list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
-          data_ds =      ex_data.train_ds,
-          disp_var =     disp_var_train,      # difference between maximal and minimal disparity for each scene, each tile
-          disp_neibs =   num_neibs_train,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
-          min_var =      VARIANCE_THRESHOLD,  # Minimal tile variance to include
-          max_var =      1000.0,              # Maximal tile variance to include
-          min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
-      num_gt_train = num_batch_tiles_train.sum()
-      high_fract_train = 1.0 * num_gt_train / (num_le_train + num_gt_train)
-      print("Number of > %f disparity variance tiles: %d, fraction = %f (train)"%(VARIANCE_THRESHOLD, num_gt_train, high_fract_train))
-      for train_var in range (NUM_TRAIN_SETS):
+          list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
+              data_ds =      ex_data.train_ds,
+              disp_var =     disp_var_train,      # difference between maximal and minimal disparity for each scene, each tile
+              disp_neibs =   num_neibs_train,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
+              min_var =      VARIANCE_THRESHOLD,  # Minimal tile variance to include
+              max_var =      1000.0,              # Maximal tile variance to include
+              min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
+          num_gt_train = num_batch_tiles_train.sum()
+          high_fract_train = 1.0 * num_gt_train / (num_le_train + num_gt_train)
+          print("Number of > %f disparity variance tiles: %d, fraction = %f (train)"%(VARIANCE_THRESHOLD, num_gt_train, high_fract_train))
+#      for train_var in range (NUM_TRAIN_SETS):
           fpath =  (train_filenameTFR+("%03d_R%d_GT%4.1f"%(train_var,RADIUS,VARIANCE_THRESHOLD)))
           ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_train, set_ds= ex_data.train_ds, radius = RADIUS)
-          
-      # test
-      list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
-      data_ds =      ex_data.test_ds,
-      disp_var =     disp_var_test,      # difference between maximal and minimal disparity for each scene, each tile
-      disp_neibs =   num_neibs_test,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
-      min_var =      0.0,                # Minimal tile variance to include
-      max_var =      VARIANCE_THRESHOLD, # Maximal tile variance to include
-      min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
-      num_le_test = num_batch_tiles_test.sum()
-      print("Number of <= %f disparity variance tiles: %d (est)"%(VARIANCE_THRESHOLD, num_le_test))
 
-      fpath =  test_filenameTFR +("TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
-      ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
-
-      list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
-      data_ds =      ex_data.test_ds,
-      disp_var =     disp_var_test,      # difference between maximal and minimal disparity for each scene, each tile
-      disp_neibs =   num_neibs_test,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
-      min_var =      VARIANCE_THRESHOLD, # Minimal tile variance to include
-      max_var =      1000.0,             # Maximal tile variance to include
-      min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
-      num_gt_test = num_batch_tiles_test.sum()
-      high_fract_test = 1.0 * num_gt_test / (num_le_test + num_gt_test)
-      print("Number of > %f disparity variance tiles: %d, fraction = %f (test)"%(VARIANCE_THRESHOLD, num_gt_test, high_fract_test))
-      fpath =  test_filenameTFR +("TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
-      ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
+          if train_var < 1: # make test files immediately after the train ones    
+          # test
+              list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
+              data_ds =      ex_data.test_ds,
+              disp_var =     disp_var_test,      # difference between maximal and minimal disparity for each scene, each tile
+              disp_neibs =   num_neibs_test,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
+              min_var =      0.0,                # Minimal tile variance to include
+              max_var =      VARIANCE_THRESHOLD, # Maximal tile variance to include
+              min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
+              num_le_test = num_batch_tiles_test.sum()
+              print("Number of <= %f disparity variance tiles: %d (est)"%(VARIANCE_THRESHOLD, num_le_test))
+        
+              fpath =  test_filenameTFR +("TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
+        
+              list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
+              data_ds =      ex_data.test_ds,
+              disp_var =     disp_var_test,      # difference between maximal and minimal disparity for each scene, each tile
+              disp_neibs =   num_neibs_test,     # number of valid tiles around each center tile (for 3x3 (radius = 1) - macximal is 9  
+              min_var =      VARIANCE_THRESHOLD, # Minimal tile variance to include
+              max_var =      1000.0,             # Maximal tile variance to include
+              min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
+              num_gt_test = num_batch_tiles_test.sum()
+              high_fract_test = 1.0 * num_gt_test / (num_le_test + num_gt_test)
+              print("Number of > %f disparity variance tiles: %d, fraction = %f (test)"%(VARIANCE_THRESHOLD, num_gt_test, high_fract_test))
+              fpath =  test_filenameTFR +("TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
+              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
   plt.show()
-#  pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
-#  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
   scene = os.path.basename(test_corr)[:17]
   scene_version= os.path.basename(os.path.dirname(os.path.dirname(test_corr)))
   fname =scene+'-'+scene_version 
-  img_filenameTFR = os.path.join(pathTFR,'img',fname)        
+  img_filenameTFR = os.path.join(pathTFR,'img',fname)
+  print_time("Saving test image %s as tiles..."%(img_filenameTFR),end = " ")        
   writeTFRewcordsImageTiles(test_corr, img_filenameTFR)
+  print_time("Done")        
   pass
-  exit(0)
+  
+  pass
     
