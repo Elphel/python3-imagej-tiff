@@ -33,6 +33,9 @@ FILES_PER_SCENE =    5 # number of random offset files for the scene to select f
 #MAX_EPOCH =        500
 LR =               1e-3 # learning rate
 LR100 =            1e-4
+LR200 =            3e-5
+LR400 =            1e-5
+LR600 =            3e-6
 USE_CONFIDENCE =     False
 ABSOLUTE_DISPARITY = False # True # False # True # False
 DEBUG_PLT_LOSS =     True
@@ -42,18 +45,20 @@ TILE_SIDE =          9 # 7
 TILE_SIZE =         TILE_SIDE* TILE_SIDE # == 81
 FEATURES_PER_TILE =  TILE_LAYERS * TILE_SIZE# == 324
 EPOCHS_TO_RUN =     1000#0 #0
+EPOCHS_FULL_TEST =   5 # 10 # 25# repeat full image test after this number of epochs
 EPOCHS_SAME_FILE =   20
 RUN_TOT_AVG =       100 # last batches to average. Epoch is 307 training  batches  
 #BATCH_SIZE =       1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 BATCH_SIZE =       2*1080//9 # == 120 Each batch of tiles has balanced D/S tiles, shuffled batches but not inside batches
 SHUFFLE_EPOCH =    True
-NET_ARCH1 =          0 # 2 #0 # 6 #0 # 4 # 3 # overwrite with argv?
-NET_ARCH2 =          3 # 2 #0 # 6 # 0 # 3 # overwrite with argv?
-ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
+NET_ARCH1 =          8 # 0 # 7 # 2 #0 # 6 #0 # 4 # 3 # overwrite with argv?
+NET_ARCH2 =          3 # 0 # 2 #0 # 6 # 0 # 3 # overwrite with argv?
+SYM8_SUB =         True # False # True # False # enforce inputs from 2d correlation have symmetrical ones (groups of 8)
+ONLY_TILE =        None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements 
 
 #DEBUG_PACK_TILES = True
-SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY])
+SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY]) +(["NS","S8"][SYM8_SUB])
 # CLUSTER_RADIUS should match input data
 CLUSTER_RADIUS =     1 # 1 - 3x3, 2 - 5x5 tiles
 
@@ -61,13 +66,14 @@ NN_LAYOUTS = {0:[0,   0,   0,   32,  20,  16],
               1:[0,   0,   0,  256, 128,  64],
               2:[0, 128,  32,   32,  32,  16],
               3:[0,   0,  40,   32,  20,  16],
-              4:[0,   0,   0,   0,   16,  16],
-              5:[0,   0,  64,  32,   32,  16],
-              6:[0,   0,  32,  16,   16,  16],
+              4:[0,   0,   0,    0,  16,  16],
+              5:[0,   0,  64,   32,  32,  16],
+              6:[0,   0,  32,   16,  16,  16],
+              7:[0,   0,  64,   16,  16,  16],
+              8:[0,   0,   0,   64,  20,  16],
               }
 NN_LAYOUT1 = NN_LAYOUTS[NET_ARCH1]
 NN_LAYOUT2 = NN_LAYOUTS[NET_ARCH2]
-
 
 #http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
 class bcolors:
@@ -293,6 +299,7 @@ def eval_results(rslt_path, absolute,
     target_disparity = np.nan_to_num(rslt[...,1], copy = False)
     gt_disparity =     np.nan_to_num(rslt[...,2], copy = False)
     gt_strength =      np.nan_to_num(rslt[...,3], copy = False)
+    rslt = []
     for min_disparity, max_disparity, max_offset_target, max_offset_result, strength_pow in variants:
         good_tiles = not_nan.copy();
         good_tiles &= (gt_disparity >= min_disparity)
@@ -311,7 +318,8 @@ def eval_results(rslt_path, absolute,
         rms1 = np.sqrt(diff1_2w.sum()/sw)
         print ("%7.3f<disp<%7.3f, offs_tgt<%5.2f, offs_rslt<%5.2f pwr=%05.3f, rms0=%7.4f, rms1=%7.4f (gain=%7.4f) num good tiles = %5d"%(
             min_disparity, max_disparity, max_offset_target,  max_offset_result, strength_pow, rms0, rms1, rms0/rms1, good_tiles.sum() ))
-    return rms0, rms1 
+        rslt.append([rms0,rms1])
+    return rslt 
     
                          
 
@@ -331,7 +339,8 @@ except IndexError:
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
 """
 files_img =        ['/home/eyesis/x3d_data/data_sets/tf_data_3x3b/img/1527257933_150165-v04.tfrecords']
-result_file =       '/home/eyesis/x3d_data/data_sets/tf_data_3x3b/rslt/1527257933_150165-v04R-M0-3.npy'
+#result_file =       '/home/eyesis/x3d_data/data_sets/tf_data_3x3b/rslt/1527257933_150165-v04R-M0-4.npy'
+result_file =       '/home/eyesis/x3d_data/data_sets/tf_data_3x3b/rslt/1527257933_150165-v04'+SUFFIX+'.npy'
 
 files_train_lvar = ["/home/eyesis/x3d_data/data_sets/tf_data_rand2/train000_R1_LE_1.5.tfrecords",
                     "/home/eyesis/x3d_data/data_sets/tf_data_rand2/train001_R1_LE_1.5.tfrecords",
@@ -523,17 +532,80 @@ def lrelu(x):
     return tf.maximum(x*0.2,x)
 #    return tf.nn.relu(x)
 
+def sym_inputs8(inp):
+    """
+    get input vector [?:4*9*9+1] (last being target_disparity) and reorder for horizontal flip,
+    vertical flip and transpose (8 variants, mode + 1 - hor, +2 - vert, +4 - transpose)
+    return same lengh, reordered
+    """
+    with tf.name_scope("sym_inputs8"):
+        td =           inp[:,-1:] # tf.reshape(inp,[-1], name = "td")[-1]
+        inp_corr =     tf.reshape(inp[:,:-1],[-1,4,TILE_SIDE,TILE_SIDE], name = "inp_corr")
+        inp_corr_h =   tf.stack([-inp_corr  [:,0,:,-1::-1], inp_corr  [:,1,:,-1::-1], -inp_corr  [:,3,:,-1::-1], -inp_corr  [:,2,:,-1::-1]], axis=1, name = "inp_corr_h")
+        inp_corr_v =   tf.stack([ inp_corr  [:,0,-1::-1,:],-inp_corr  [:,1,-1::-1,:],  inp_corr  [:,3,-1::-1,:],  inp_corr  [:,2,-1::-1,:]], axis=1, name = "inp_corr_v")
+        inp_corr_hv =  tf.stack([ inp_corr_h[:,0,-1::-1,:],-inp_corr_h[:,1,-1::-1,:],  inp_corr_h[:,3,-1::-1,:],  inp_corr_h[:,2,-1::-1,:]], axis=1, name = "inp_corr_hv")
+        inp_corr_t =   tf.stack([tf.transpose(inp_corr   [:,1], perm=[0,2,1]),
+                                 tf.transpose(inp_corr   [:,0], perm=[0,2,1]),
+                                 tf.transpose(inp_corr   [:,2], perm=[0,2,1]),
+                                -tf.transpose(inp_corr   [:,3], perm=[0,2,1])], axis=1, name = "inp_corr_t")
+        inp_corr_ht =  tf.stack([tf.transpose(inp_corr_h [:,1], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_h [:,0], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_h [:,2], perm=[0,2,1]),
+                                -tf.transpose(inp_corr_h [:,3], perm=[0,2,1])], axis=1, name = "inp_corr_ht")
+        inp_corr_vt =  tf.stack([tf.transpose(inp_corr_v [:,1], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_v [:,0], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_v [:,2], perm=[0,2,1]),
+                                -tf.transpose(inp_corr_v [:,3], perm=[0,2,1])], axis=1, name = "inp_corr_vt")
+        inp_corr_hvt = tf.stack([tf.transpose(inp_corr_hv[:,1], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_hv[:,0], perm=[0,2,1]),
+                                 tf.transpose(inp_corr_hv[:,2], perm=[0,2,1]),
+                                -tf.transpose(inp_corr_hv[:,3], perm=[0,2,1])], axis=1, name = "inp_corr_hvt")
+#        return td, [inp_corr, inp_corr_h, inp_corr_v, inp_corr_hv, inp_corr_t, inp_corr_ht, inp_corr_vt, inp_corr_hvt]
+        """
+        return [tf.concat([tf.reshape(inp_corr,    [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr"),
+                tf.concat([tf.reshape(inp_corr_h,  [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_h"),
+                tf.concat([tf.reshape(inp_corr_v,  [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_v"),
+                tf.concat([tf.reshape(inp_corr_hv, [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_hv"),
+                tf.concat([tf.reshape(inp_corr_t,  [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_t"),
+                tf.concat([tf.reshape(inp_corr_ht, [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_ht"),
+                tf.concat([tf.reshape(inp_corr_vt, [inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_vt"),
+                tf.concat([tf.reshape(inp_corr_hvt,[inp_corr.shape[0],-1]),td], axis=1,name = "out_corr_hvt")]
+        """
+        cl = 4 * TILE_SIDE * TILE_SIDE
+        return [tf.concat([tf.reshape(inp_corr,    [-1,cl]),td], axis=1,name = "out_corr"),
+                tf.concat([tf.reshape(inp_corr_h,  [-1,cl]),td], axis=1,name = "out_corr_h"),
+                tf.concat([tf.reshape(inp_corr_v,  [-1,cl]),td], axis=1,name = "out_corr_v"),
+                tf.concat([tf.reshape(inp_corr_hv, [-1,cl]),td], axis=1,name = "out_corr_hv"),
+                tf.concat([tf.reshape(inp_corr_t,  [-1,cl]),td], axis=1,name = "out_corr_t"),
+                tf.concat([tf.reshape(inp_corr_ht, [-1,cl]),td], axis=1,name = "out_corr_ht"),
+                tf.concat([tf.reshape(inp_corr_vt, [-1,cl]),td], axis=1,name = "out_corr_vt"),
+                tf.concat([tf.reshape(inp_corr_hvt,[-1,cl]),td], axis=1,name = "out_corr_hvt")]
+#                           inp_corr_h, inp_corr_v, inp_corr_hv, inp_corr_t, inp_corr_ht, inp_corr_vt, inp_corr_hvt]
+    
 
-def network_sub(input, layout, reuse):
+def network_sub(input, layout, reuse, sym8 = False):
     last_indx = None;
     fc = []
     for i, num_outs in enumerate (layout):
         if num_outs:
            if fc:
                inp = fc[-1]
+               fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_sub'+str(i), reuse = reuse))
            else:
                inp = input
-           fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_sub'+str(i), reuse = reuse))
+               if sym8:
+                   inp8 = sym_inputs8(inp)
+                   num_non_sum = num_outs %  len(inp8) # if number of first layer outputs is not multiple of 8
+                   num_sym8 =    num_outs // len(inp8) # number of symmetrical groups
+                   fc_sym = []
+                   for j in range (len(inp8)): # ==8
+                       fc_sym.append(slim.fully_connected(inp8[j],    num_sym8, activation_fn=lrelu, scope='g_fc_sub'+str(i),     reuse = reuse | (j > 0)))
+                   if num_non_sum > 0:
+                       fc_sym.append(slim.fully_connected(inp,     num_non_sum, activation_fn=lrelu, scope='g_fc_sub'+str(i)+"r", reuse = reuse))    
+                   fc.append(tf.concat(fc_sym, 1, name='sym_input_layer'))
+               else:
+                   fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_sub'+str(i), reuse = reuse))
+           
     return fc[-1]
 
 def network_inter(input, layout):
@@ -556,7 +628,8 @@ def network_inter(input, layout):
 def network_siam(input, # now [?:9,325]
                  layout1, 
                  layout2,
-                 only_tile=None): # just for debugging - feed only data from the center sub-network
+                 sym8 =        False,
+                 only_tile =   None): # just for debugging - feed only data from the center sub-network
     with tf.name_scope("Siam_net"):
         num_legs =  input.shape[1] # == 9
         inter_list = []
@@ -565,7 +638,8 @@ def network_siam(input, # now [?:9,325]
             if (only_tile is None) or (i == only_tile):
                 inter_list.append(network_sub(input[:,i,:],
                                           layout= layout1,
-                                          reuse= reuse))
+                                          reuse= reuse,
+                                          sym8 = sym8))
                 reuse = True
         inter_tensor = tf.concat(inter_list, 1, name='inter_tensor')
         return  network_inter (inter_tensor, layout2)   
@@ -715,6 +789,7 @@ corr2d9x325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,F
 out =       network_siam(input=corr2d9x325,
                          layout1 =   NN_LAYOUT1, 
                          layout2 =   NN_LAYOUT2,
+                         sym8 =      SYM8_SUB,
                          only_tile = ONLY_TILE) #Remove/put None for normal operation
 #            w_slice = tf.reshape(gt_ds_batch[:,1],[-1],                     name = "w_gt_slice")
 
@@ -745,6 +820,8 @@ GT_variance =  debug_gt_variance(indx = 0,        # This tile index (0..8)
 tf_ph_G_loss = tf.placeholder(tf.float32,shape=None,name='G_loss_avg')
 tf_ph_sq_diff = tf.placeholder(tf.float32,shape=None,name='sq_diff_avg')
 tf_gtvar_diff = tf.placeholder(tf.float32,shape=None,name='gtvar_diff')
+tf_img_test0 = tf.placeholder(tf.float32,shape=None,name='img_test0')
+tf_img_test9 = tf.placeholder(tf.float32,shape=None,name='img_test9')
 with tf.name_scope('sample'):
     tf.summary.scalar("G_loss",       G_loss)
     tf.summary.scalar("sq_diff",      _cost1)
@@ -754,6 +831,9 @@ with tf.name_scope('epoch_average'):
     tf.summary.scalar("G_loss_epoch", tf_ph_G_loss)
     tf.summary.scalar("sq_diff_epoch",tf_ph_sq_diff)
     tf.summary.scalar("gtvar_diff",   tf_gtvar_diff)
+    
+    tf.summary.scalar("img_test0",   tf_img_test0)
+    tf.summary.scalar("img_test9",   tf_img_test9)
 
 t_vars=tf.trainable_variables()
 lr=tf.placeholder(tf.float32)
@@ -761,7 +841,7 @@ G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
 
 saver=tf.train.Saver()
 
-ROOT_PATH  = './attic/nn_ds_neibs2_graph'+SUFFIX+"/"
+ROOT_PATH  = './attic/nn_ds_neibs3_graph'+SUFFIX+"/"
 TRAIN_PATH =  ROOT_PATH + 'train'
 TEST_PATH  =  ROOT_PATH + 'test'
 TEST_PATH1  = ROOT_PATH + 'test1'
@@ -797,13 +877,25 @@ with tf.Session()  as sess:
     gtvar_test = 0.0
     gtvar_train_avg = 0.0
     gtvar_test_avg =  0.0
+    img_gain_test0 =  1.0
+    img_gain_test9 =  1.0
     
 #    num_train_variants = len(files_train_lvar)
     num_train_variants = len(datasets_train)
     for epoch in range (EPOCHS_TO_RUN):
 #        file_index = (epoch // 20) % 2 
         file_index = epoch  % num_train_variants
-        learning_rate = [LR,LR100][epoch >=100] 
+        if   epoch >=600:
+            learning_rate = LR600
+        elif epoch >=400:
+            learning_rate = LR400
+        elif epoch >=200:
+            learning_rate = LR200
+        elif epoch >=100:
+            learning_rate = LR100
+        else:
+            learning_rate = LR
+#        learning_rate = [LR,LR100][epoch >=100] 
 
         sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           datasets_train[file_index]['corr2d'],
                                                      target_disparity_train_placeholder: datasets_train[file_index]['target_disparity'],
@@ -828,7 +920,7 @@ with tf.Session()  as sess:
                         GT_variance
 #                        corr2d325,
                     ],
-                    feed_dict={lr:learning_rate,tf_ph_G_loss:train_avg, tf_ph_sq_diff:train2_avg, tf_gtvar_diff:gtvar_train_avg}) # previous value of *_avg
+                    feed_dict={lr:learning_rate,tf_ph_G_loss:train_avg, tf_ph_sq_diff:train2_avg, tf_gtvar_diff:gtvar_train_avg, tf_img_test0:img_gain_test0, tf_img_test9:img_gain_test9}) # previous value of *_avg
                 
                 # save all for now as a test
                 #train_writer.add_summary(summary, i)
@@ -866,7 +958,7 @@ with tf.Session()  as sess:
                          _cost1,
                          GT_variance
                          ],
-                            feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg})  # previous value of *_avg
+                            feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg, tf_img_test0:img_gain_test0, tf_img_test9:img_gain_test9})  # previous value of *_avg
                     loss_test_hist[i] =  G_loss_tested
                     loss2_test_hist[i] = out_cost1
                     gtvar_test_hist[i] = gt_variance
@@ -885,62 +977,61 @@ with tf.Session()  as sess:
         test_writer1.add_summary(test_summaries[1], epoch)
         
         print_time("%d:%d -> %f %f (%f %f) dbg:%f %f"%(epoch,i,train_avg, test_avg,train2_avg, test2_avg, gtvar_train_avg, gtvar_test_avg))
-
+        if ((epoch + 1) == EPOCHS_TO_RUN) or (((epoch + 1) % EPOCHS_FULL_TEST) == 0):
 ###################################################
 # Read the full image
 ################################################### 
-        
-    test_summaries_img = [0.0]*len(datasets_img)
-#    disp_out=  np.empty((dataset_img_size * BATCH_SIZE), dtype=np.float32)
-    disp_out=  np.empty((WIDTH*HEIGHT), dtype=np.float32)
-    
-    for ntest,dataset_img in enumerate(datasets_img):
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:      dataset_img['corr2d'],
-                                                target_disparity_train_placeholder: dataset_img['target_disparity'],
-                                                gt_ds_train_placeholder:            dataset_img['gt_ds']})
-        
-#        start_offs=0
-        for start_offs in range(0,disp_out.shape[0],BATCH_SIZE):
-            end_offs = min(start_offs+BATCH_SIZE,disp_out.shape[0])
+            test_summaries_img = [0.0]*len(datasets_img)
+        #    disp_out=  np.empty((dataset_img_size * BATCH_SIZE), dtype=np.float32)
+            disp_out=  np.empty((WIDTH*HEIGHT), dtype=np.float32)
             
-            try:
-                test_summaries_img[ntest], G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
-                    [merged,
-                     G_loss,
-                     out,
-                     _disp_slice,
-                     _d_gt_slice,
-                     _out_diff,
-                     _out_diff2,
-                     _w_norm,
-                     _out_wdiff2,
-                     _cost1,
-                     GT_variance
-                     ],
-                        feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg})  # previous value of *_avg
-#                loss_test_hist[i] =  G_loss_tested
-#                loss2_test_hist[i] = out_cost1
-#                gtvar_test_hist[i] = gt_variance
-            except tf.errors.OutOfRangeError:
-                print("test done at step %d"%(i))
-                break
-            try:
-#                disp_out[BATCH_SIZE*i:BATCH_SIZE*(i+1)] = output.flatten()
-                disp_out[start_offs:end_offs] = output.flatten()
-            except ValueError:
-                print("dataset_img_size= %d, i=%d, output.shape[0]=%d "%(dataset_img_size, i, output.shape[0]))
-                break;    
-            pass
-        try:
-            os.makedirs(os.path.dirname(result_file))
-        except:
-            pass     
-        
-        rslt = np.concatenate([disp_out.reshape(-1,1), t_disp, gtruth],1)
-        np.save(result_file,           rslt.reshape(HEIGHT,WIDTH,-1))
-        
-        eval_results(result_file, ABSOLUTE_DISPARITY)        
-
+            for ntest,dataset_img in enumerate(datasets_img):
+                sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:      dataset_img['corr2d'],
+                                                        target_disparity_train_placeholder: dataset_img['target_disparity'],
+                                                        gt_ds_train_placeholder:            dataset_img['gt_ds']})
+        #        start_offs=0
+                for start_offs in range(0,disp_out.shape[0],BATCH_SIZE):
+                    end_offs = min(start_offs+BATCH_SIZE,disp_out.shape[0])
+                    
+                    try:
+                        test_summaries_img[ntest], G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
+                            [merged,
+                             G_loss,
+                             out,
+                             _disp_slice,
+                             _d_gt_slice,
+                             _out_diff,
+                             _out_diff2,
+                             _w_norm,
+                             _out_wdiff2,
+                             _cost1,
+                             GT_variance
+                             ],
+                                feed_dict={lr:learning_rate,tf_ph_G_loss:test_avg, tf_ph_sq_diff:test2_avg, tf_gtvar_diff:gtvar_test_avg, tf_img_test0:img_gain_test0, tf_img_test9:img_gain_test9})  # previous value of *_avg
+        #                loss_test_hist[i] =  G_loss_tested
+        #                loss2_test_hist[i] = out_cost1
+        #                gtvar_test_hist[i] = gt_variance
+                    except tf.errors.OutOfRangeError:
+                        print("test done at step %d"%(i))
+                        break
+                    try:
+        #                disp_out[BATCH_SIZE*i:BATCH_SIZE*(i+1)] = output.flatten()
+                        disp_out[start_offs:end_offs] = output.flatten()
+                    except ValueError:
+                        print("dataset_img_size= %d, i=%d, output.shape[0]=%d "%(dataset_img_size, i, output.shape[0]))
+                        break;    
+                    pass
+                try:
+                    os.makedirs(os.path.dirname(result_file))
+                except:
+                    pass     
+                
+                rslt = np.concatenate([disp_out.reshape(-1,1), t_disp, gtruth],1)
+                np.save(result_file,           rslt.reshape(HEIGHT,WIDTH,-1))
+                
+                rslt = eval_results(result_file, ABSOLUTE_DISPARITY)
+                img_gain_test0 = rslt[0][0]/rslt[0][1]   
+                img_gain_test9 = rslt[9][0]/rslt[9][1]   
      
      # Close writers
     train_writer.close()
