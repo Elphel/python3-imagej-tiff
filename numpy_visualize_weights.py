@@ -4,10 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 import math
 
-def hamming_window(x,N):
-  y = 0.2 - 0.46*math.cos(2*math.pi*x/(N-1))
-  return y
-
 # input: np.array(a,b) - 1 channel
 # output: np.array(a,b,3) - 3 color channels
 def coldmap(img,zero_span=0.2):
@@ -59,7 +55,7 @@ def tiles(img,shape,tiles_per_line=1,borders=True):
 
   inner_color = [img_max/4,img_max/4,img_min]
   inner_color = [img_min,img_min,img_min]
-  inner_color = [img_max,img_max,img_min]
+  #inner_color = [img_max,img_max,img_min]
 
   group_h = shape[0]
   group_w = shape[1]
@@ -141,52 +137,12 @@ def tiles(img,shape,tiles_per_line=1,borders=True):
   return out
 
 if __name__=="__main__":
-  #
-  hw = hamming_window
-  #
-  image = np.array([[1*hw(i,512)*hw(j,512) for i in range(512)] for j in range(512)],np.float32)
-  zeros = np.zeros((512,512))
 
-  # 32x324
-
-  #image2 = np.zeros((32,324))
-  #rgb_img_0 = tiles(image2,(1,4,9,9),tiles_per_line=2,borders=True)
-
-  #image2 = np.zeros((32,144))
-  image2 = np.array([[1*hw(i,144)*hw(j,32) for i in range(144)] for j in range(32)],np.float32)
-  #image3 = coldmap(image2)
-  rgb_img_0 = tiles(coldmap(image2),(3,3,4,4),tiles_per_line=8,borders=True)
+  #image = np.zeros((32,144))
+  image = np.random.rand(32,144)
+  rgb_img_0 = tiles(coldmap(image),(3,3,4,4),tiles_per_line=8,borders=True)
 
   fig = plt.figure()
-  fig.suptitle("HaWi")
+  fig.suptitle("Test")
   plt.imshow(rgb_img_0)
-
-  rgb_img = coldmap(image)
-
-  #print(rgb_img)
-
-  '''
-  for i in range(512):
-    for j in range(512):
-      if image[i,j]<0:
-        rgb_img[i,j,0] = 0
-        rgb_img[i,j,1] = 0
-        #rgb_img[i,j,2] = 255
-
-      if image[i,j]>0:
-        #rgb_img[i,j,0] = 255
-        rgb_img[i,j,1] = 0
-        rgb_img[i,j,2] = 0
-
-      if image[i,j]==0:
-        rgb_img[i,j,0] = 0
-        rgb_img[i,j,1] = 255
-        rgb_img[i,j,2] = 0
-  '''
-  print(rgb_img.shape)
-
-  fig = plt.figure()
-  fig.suptitle("HamWindow")
-  plt.imshow(rgb_img)
-  #plt.colorbar()
   plt.show()

@@ -50,10 +50,12 @@ BATCH_SIZE =       2*1080//9 # == 120 Each batch of tiles has balanced D/S tiles
 SHUFFLE_EPOCH =    True
 NET_ARCH1 =          0 #0 # 4 # 3 # overwrite with argv?
 NET_ARCH2 =          0 # 0 # 3 # overwrite with argv?
+SYM8_SUB =        False #  True # False # True # False # True # False # enforce inputs from 2d correlation have symmetrical ones (groups of 8)
 ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements
 
 #DEBUG_PACK_TILES = True
+WLOSS_LAMBDA =       0.001 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
 SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY])
 # CLUSTER_RADIUS should match input data
 CLUSTER_RADIUS =     1 # 1 - 3x3, 2 - 5x5 tiles
@@ -445,6 +447,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
     
     global test_op
     
+    # the scope is known
     with tf.variable_scope(scope,reuse=tf.AUTO_REUSE):
         # histograms
         w = tf.get_variable('weights',shape=[in_shape,out_shape])
@@ -462,8 +465,13 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 # red - the values will be automapped to 0-255 range
                 # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 # yellow - the values will be automapped to 0-255 range
-                grid_y = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
-                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                #grid_y = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
+                # black
+                grid_y = tf.stack([tf.reduce_min(w),tf.reduce_min(w),tf.reduce_min(w)])
+                
+                #grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # white
+                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)])
                 
                 wt = tf.transpose(w,[1,0])
                 wt = wt[:,:-1]
@@ -521,8 +529,12 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 # red - the values will be automapped to 0-255 range
                 # grid = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
                 # yellow - the values will be automapped to 0-255 range
-                grid_y = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)/2])
-                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # black
+                grid_y = tf.stack([tf.reduce_min(w),tf.reduce_min(w),tf.reduce_min(w)])
+                
+                #grid_r = tf.stack([tf.reduce_max(w),tf.reduce_min(w),tf.reduce_min(w)])
+                # white
+                grid_r = tf.stack([tf.reduce_max(w),tf.reduce_max(w),tf.reduce_max(w)])
                 
                 wt = tf.transpose(w,[1,0])
                 
@@ -592,22 +604,48 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 
                 
 
-def network_sub(input, layout, reuse):
+def network_sub(input, layout, reuse, sym8 = False):
     last_indx = None;
     fc = []
+    inp_weights = []
     for i, num_outs in enumerate (layout):
         if num_outs:
            if fc:
                inp = fc[-1]
+               fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_sub'+str(i), reuse = reuse))
            else:
                inp = input
-               
-           fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_sub'+str(i), reuse = reuse))
+               if sym8:
+                   inp8 = sym_inputs8(inp)
+                   num_non_sum = num_outs %  len(inp8) # if number of first layer outputs is not multiple of 8
+                   num_sym8 =    num_outs // len(inp8) # number of symmetrical groups
+                   fc_sym = []
+                   for j in range (len(inp8)): # ==8
+                       reuse_this = reuse | (j > 0)
+                       scp = 'g_fc_sub'+str(i)
+                       fc_sym.append(slim.fully_connected(inp8[j],    num_sym8, activation_fn=lrelu, scope= scp,     reuse = reuse_this))
+                       if not reuse_this:
+                           with tf.variable_scope(scp,reuse=True) : # tf.AUTO_REUSE):
+                              inp_weights.append(tf.get_variable('weights')) # ,shape=[inp.shape[1],num_outs]))
+                           network_summary_w_b(scp, inp.shape[1], num_outs, layout, i, 'sub')
+                   if num_non_sum > 0:
+                       reuse_this = reuse
+                       scp = 'g_fc_sub'+str(i)+"r"
+                       fc_sym.append(slim.fully_connected(inp,     num_non_sum, activation_fn=lrelu, scope=scp, reuse = reuse_this))    
+                       if not reuse_this:
+                           with tf.variable_scope(scp,reuse=True) : # tf.AUTO_REUSE):
+                              inp_weights.append(tf.get_variable('weights')) # ,shape=[inp.shape[1],num_outs]))
+                           network_summary_w_b(scp, inp.shape[1], num_outs, layout, i, 'sub') 
+                   fc.append(tf.concat(fc_sym, 1, name='sym_input_layer'))
+               else:
+                   scp = 'g_fc_sub'+str(i)
+                   fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope= scp, reuse = reuse))
+                   if not reuse:
+                       with tf.variable_scope(scp, reuse=True) : # tf.AUTO_REUSE):
+                          inp_weights.append(tf.get_variable('weights')) # ,shape=[inp.shape[1],num_outs]))
+                       network_summary_w_b(scp, inp.shape[1], num_outs, layout, i, 'sub') 
            
-           if not reuse:
-               network_summary_w_b('g_fc_sub'+str(i), inp.shape[1], num_outs, layout, i, 'sub')
-                   
-    return fc[-1]
+    return fc[-1], inp_weights
 
 def network_inter(input, layout):
     last_indx = None;
@@ -624,28 +662,37 @@ def network_inter(input, layout):
     if USE_CONFIDENCE:
         fc_out  = slim.fully_connected(fc[-1],     2, activation_fn=lrelu,scope='g_fc_inter_out')
         network_summary_w_b('g_fc_inter_out',fc[-1].shape[1], 2, layout, -1, 'inter')
-    else:
+    else:     
         fc_out  = slim.fully_connected(fc[-1],     1, activation_fn=None,scope='g_fc_inter_out')
         network_summary_w_b('g_fc_inter_out',fc[-1].shape[1], 1, layout, -1, 'inter')
-        #If using residual disparity, split last layer into 2 or remove activation and add rectifier to confidence only
+        #If using residual disparity, split last layer into 2 or remove activation and add rectifier to confidence only  
     return fc_out
 
-def network_siam(input, # now [?:9,325]
-                 layout1,
+def network_siam(input, # now [?,9,325]-> [?,25,325]
+                 layout1, 
                  layout2,
-                 only_tile=None): # just for debugging - feed only data from the center sub-network
+                 sym8 =        False,
+                 only_tile =   None): # just for debugging - feed only data from the center sub-network
     with tf.name_scope("Siam_net"):
+        inp_weights = []
         num_legs =  input.shape[1] # == 9
         inter_list = []
         reuse = False
         for i in range (num_legs):
             if (only_tile is None) or (i == only_tile):
-                inter_list.append(network_sub(input[:,i,:],
+#                inter_list.append(network_sub(input[:,i,:],
+#                                          layout= layout1,
+#                                          reuse= reuse,
+#                                          sym8 = sym8))
+                ns, ns_weights = network_sub(input[:,i,:],
                                           layout= layout1,
-                                          reuse= reuse))
+                                          reuse= reuse,
+                                          sym8 = sym8)
+                inter_list.append(ns)
+                inp_weights += ns_weights
                 reuse = True
         inter_tensor = tf.concat(inter_list, 1, name='inter_tensor')
-        return  network_inter (inter_tensor, layout2)
+        return  network_inter (inter_tensor, layout2),  inp_weights 
 #corr2d9x325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[None,cluster_size,FEATURES_PER_TILE]) , tf.reshape(next_element_tt['target_disparity'], [None,cluster_size, 1])],2)
 
 def debug_gt_variance(
@@ -774,12 +821,45 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
         else:
             return cost1b,  disp_slice, d_gt_slice, out_diff,out_diff2, w_norm, out_wdiff2, cost1
 
+
+
+def weightsLoss(inp_weights):       # [batch_size,(1..2)] tf_result
+#                weights_lambdas):  # single lambda or same length as inp_weights.shape[1]
+    """
+    Enforcing 'smooth' weights for the input 2d correlation tiles
+    @return mean squared difference for each weight and average of 8 neighbors divided by mean squared weights
+    """
+    weight_ortho = 1.0
+    weight_diag  = 0.7
+    sw = 4.0 * (weight_ortho + weight_diag)
+    weight_ortho /= sw
+    weight_diag /=  sw
+#    w_neib = tf.const([[weight_diag,  weight_ortho, weight_diag],
+#                       [weight_ortho, -1.0,         weight_ortho],
+#                       [weight_diag,  weight_ortho, weight_diag]])
+    with tf.name_scope("WeightsLoss"):
+        # Adding 1 tile border
+        tf_inp =     tf.reshape(inp_weights[:TILE_LAYERS * TILE_SIZE,:], [TILE_LAYERS, FILE_TILE_SIDE, FILE_TILE_SIDE, inp_weights.shape[1]], name = "tf_inp")
+        tf_inp_ext_h = tf.concat([tf_inp       [:, :,  :1, :], tf_inp,       tf_inp      [:,   :, -1:, :]], axis = 2, name ="tf_inp_ext_h")
+        tf_inp_ext   = tf.concat([tf_inp_ext_h [:, :1, :,  :], tf_inp_ext_h, tf_inp_ext_h[:, -1:,   :, :]], axis = 1, name ="tf_inp_ext")
+        s_ortho = tf_inp_ext[:,1:-1,:-2,:] + tf_inp_ext[:,1:-1, 2:,:] + tf_inp_ext[:,1:-1,:-2,:] + tf_inp_ext[:,1:-1, 2:, :] 
+        s_corn =  tf_inp_ext[:, :-2,:-2,:] + tf_inp_ext[:, :-2, 2:,:] + tf_inp_ext[:,2:,  :-2,:] + tf_inp_ext[:,2:  , 2:, :]
+        w_diff =  tf.subtract(tf_inp, s_ortho * weight_ortho + s_corn * weight_diag, name="w_diff") 
+        w_diff2 = tf.multiply(w_diff, w_diff,                                        name="w_diff2") 
+        w_var =   tf.reduce_mean(w_diff2,                                            name="w_var")
+        w2_mean = tf.reduce_mean(inp_weights * inp_weights,                          name="w2_mean")
+        w_rel =   tf.divide(w_var, w2_mean,                                          name= "w_rel")
+        return w_rel # scalar, cost for weights non-smoothness in 2d
+
 #In GPU - reformat inputs
 
 ##corr2d325 = tf.concat([next_element_tt['corr2d'], next_element_tt['target_disparity']],1)
 
 #Should have shape (?,9,325)
 corr2d9x325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,FEATURES_PER_TILE]) , tf.reshape(next_element_tt['target_disparity'], [-1,cluster_size, 1])],2)
+
+corr2d_Nx325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,FEATURES_PER_TILE], name="coor2d_cluster"),
+                          tf.reshape(next_element_tt['target_disparity'], [-1,cluster_size, 1], name="targdisp_cluster")], axis=2, name = "corr2d_Nx325")
 
 #corr2d9x324 = tf.reshape( next_element_tt['corr2d'],          [-1, cluster_size, FEATURES_PER_TILE], name = 'corr2d9x324')
 #td9x1 =       tf.reshape(next_element_tt['target_disparity'], [-1, cluster_size, 1],    name = 'td9x1')
@@ -789,10 +869,11 @@ corr2d9x325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,F
 #    in_features = tf.concat([corr2d,target_disparity],0)
 
 #out =       network_fc_simple(input=corr2d325, arch = NET_ARCH1)
-out =       network_siam(input=corr2d9x325,
-                         layout1 =   NN_LAYOUT1,
-                         layout2 =   NN_LAYOUT2,
-                         only_tile = ONLY_TILE) #Remove/put None for normal operation
+out, inp_weights =       network_siam(input=corr2d_Nx325,
+                                      layout1 =   NN_LAYOUT1, 
+                                      layout2 =   NN_LAYOUT2,
+                                      sym8 =      SYM8_SUB,
+                                      only_tile = ONLY_TILE) #Remove/put None for normal operation
 #            w_slice = tf.reshape(gt_ds_batch[:,1],[-1],                     name = "w_gt_slice")
 
 # Extract target disparity and GT corresponding to the center tile (reshape - just to name)
@@ -803,16 +884,23 @@ G_loss, _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _
               target_disparity_batch=  next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1], # target_disparity_batch_center, # next_element_tt['target_disparity'], # target_disparity, ### target_d,   # [batch_size]        tf placeholder
               gt_ds_batch =            next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)],  # gt_ds_batch_center, ## next_element_tt['gt_ds'], # gt_ds, ### gt,         # [batch_size,2]      tf placeholder
               absolute_disparity =     ABSOLUTE_DISPARITY,
-              use_confidence =         USE_CONFIDENCE, # True,
+              use_confidence =         USE_CONFIDENCE, # True, 
               lambda_conf_avg =        0.01,
               lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
               gt_conf_pwr =            2.0,
-              error2_offset =          0.0025, # (0.05^2)
+              error2_offset =          0, # 0.0025, # (0.05^2)
               disp_wmin =              1.0,    # minimal disparity to apply weight boosting for small disparities
               disp_wmax =              8.0,    # maximal disparity to apply weight boosting for small disparities
               use_out =                False)  # use calculated disparity for disparity weight boosting (False - use target disparity)
+
+if WLOSS_LAMBDA > 0.0:   
+    W_loss =     weightsLoss(inp_weights[0]) #    inp_weights - list of tensors, currently - just [0]
+    GW_loss =    tf.add(G_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
+else:
+    GW_loss = G_loss
+    W_loss =  tf.constant(0.0)
 
 #debug
 GT_variance =  debug_gt_variance(indx = 0,        # This tile index (0..8)
@@ -834,7 +922,9 @@ with tf.name_scope('epoch_average'):
 
 t_vars=tf.trainable_variables()
 lr=tf.placeholder(tf.float32)
-G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
+
+#G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(G_loss)
+G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(GW_loss)
 
 saver=tf.train.Saver()
 
@@ -856,7 +946,7 @@ with tf.Session()  as sess:
     merged = tf.summary.merge_all()
     
     # display weights, part 1 begin
-    import numpy_image_test as nit
+    import numpy_visualize_weights as npw
     
     l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
     l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
@@ -899,8 +989,8 @@ with tf.Session()  as sess:
         for i in range(dataset_train_size):
             try:
 #                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, corr2d325_out  = sess.run(
-                _, train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
-                    [   test_op, merged,
+                train_summary,_, G_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
+                    [   merged,
                         G_opt,
                         G_loss,
                         out,
@@ -978,7 +1068,7 @@ with tf.Session()  as sess:
         with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
             w = tf.get_variable('weights',shape=[325,NN_LAYOUT1[l1]])
             w = tf.transpose(w,(1,0))            
-            img1 = nit.tiles(nit.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
+            img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
             img1 = img1[np.newaxis,...]
             
         train_writer.add_summary(wimg1.eval(feed_dict={wimg1_placeholder: img1}), epoch)
@@ -986,7 +1076,7 @@ with tf.Session()  as sess:
         with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
             w = tf.get_variable('weights',shape=[144,NN_LAYOUT1[l2]])
             w = tf.transpose(w,(1,0))            
-            img2 = nit.tiles(nit.coldmap(w.eval(),zero_span=0.0002),(3,3,4,4),tiles_per_line=4,borders=True)
+            img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(3,3,4,4),tiles_per_line=4,borders=True)
             img2 = img2[np.newaxis,...]
             
         train_writer.add_summary(wimg2.eval(feed_dict={wimg2_placeholder: img2}), epoch)
