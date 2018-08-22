@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 
 import shutil
 import sys
+from threading import Thread
 
 TIME_START = time.time()
 TIME_LAST  = TIME_START
@@ -56,14 +57,19 @@ BATCH_SIZE =       ([1,2][TWO_TRAINS])*2*1000//25 # == 80 Each batch of tiles ha
 SHUFFLE_EPOCH =    True
 NET_ARCH1 =       0 # 4 # #4 # 8 # 4 # 0 #3 # 0 #  0 # 0 # 0 # 8 # 0 # 7 # 2 #0 # 6 #0 # 4 # 3 # overwrite with argv?
 NET_ARCH2 =       0 # 4 # 0 # 0 # 4 # 0 # 0 # 3 #  0 # 3 # 0 # 3 # 0 # 2 #0 # 6 # 0 # 3 # overwrite with argv?
-SYM8_SUB =        True #False #  True # False # True # False # True # False # enforce inputs from 2d correlation have symmetrical ones (groups of 8)
+SYM8_SUB =        False # True #False #  True # False # True # False # True # False # enforce inputs from 2d correlation have symmetrical ones (groups of 8)
 ONLY_TILE =        None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements 
 #DEBUG_PACK_TILES = True
 # CLUSTER_RADIUS should match input data
 CLUSTER_RADIUS =     2 # 1 # 1 - 3x3, 2 - 5x5 tiles
 SHUFFLE_FILES  =     True
-WLOSS_LAMBDA =       50.0 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
+WLOSS_LAMBDA =       0.0 # 50.0 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
+WBORDERS_ZERO =      True # Border conditions for first layer weights: False - free, True - tied to 0
+MAX_FILES_PER_GROUP = 6 # just to try, normally should be 8
+FILE_UPDATE_EPOCHS =  2 # update train files each this many epochs. 0 - do not update
+
+
 SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY]) +(["NS","S8"][SYM8_SUB])+"LMBD"+str(WLOSS_LAMBDA)
 
 NN_LAYOUTS = {0:[0,   0,   0,   32,  20,  16],
@@ -98,6 +104,12 @@ def print_time(txt="",end="\n"):
     print(("%s"+bcolors.BOLDWHITE+"at %.4fs (+%.4fs)"+bcolors.ENDC)%(txt,t-TIME_START,t-TIME_LAST), end = end, flush=True)
     TIME_LAST = t
 #reading to memory (testing)
+train_next = [{'file':0, 'slot':0, 'files':0, 'slots':0},
+              {'file':0, 'slot':0, 'files':0, 'slots':0}]
+
+if TWO_TRAINS:
+    train_next +=  [{'file':0, 'slot':0, 'files':0, 'slots':0},
+                    {'file':0, 'slot':0, 'files':0, 'slots':0}]
 def readTFRewcordsEpoch(train_filename):
 #    filenames = [train_filename]
 #    dataset = tf.data.TFRecorDataset(filenames)
@@ -141,8 +153,20 @@ def readTFRewcordsEpoch(train_filename):
         np.save(file_corr2d,           corr2d)
         np.save(file_target_disparity, target_disparity)
         np.save(file_gt_ds,            gt_ds)
-        
-    return corr2d, target_disparity, gt_ds   
+    return corr2d, target_disparity, gt_ds
+
+def getMoreFiles(fpaths,rslt):
+    for fpath in fpaths:
+        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
+        dataset = {"corr2d":           corr2d,
+                     "target_disparity": target_disparity,
+                     "gt_ds":            gt_ds}
+        if FILE_TILE_SIDE > TILE_SIDE:
+            reduce_tile_size([dataset],   TILE_LAYERS, TILE_SIDE)
+        reformat_to_clusters([dataset])
+        rslt.append(dataset)
+
+   
 
 #from http://warmspringwinds.github.io/tensorflow/tf-slim/2016/12/21/tfrecords-guide/
 def read_and_decode(filename_queue):
@@ -264,6 +288,20 @@ def shuffle_chunks_in_place(datasets_data, tiles_groups_per_chunk):
         ds['corr2d'] =           ds['corr2d'].          reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
         ds['target_disparity'] = ds['target_disparity'].reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
         ds['gt_ds'] =            ds['gt_ds'].           reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
+
+
+def _setFileSlot(train_next,files):
+    train_next['files'] = files
+    train_next['slots'] = min(train_next['files'], MAX_FILES_PER_GROUP)
+     
+def _nextFileSlot(train_next):
+    train_next['file'] = (train_next['file'] + 1) % train_next['files'] 
+    train_next['slot'] = (train_next['slot'] + 1) % train_next['slots'] 
+
+    
+def replaceNextDataset(datasets_data, new_dataset, train_next, nset,period):
+    replaceDataset(datasets_data, new_dataset, nset, period, findx = train_next['slot'])
+#    _nextFileSlot(train_next[nset])
 
         
 def replaceDataset(datasets_data, new_dataset, nset, period, findx):
@@ -391,18 +429,19 @@ except IndexError:
 train_filenameTFR1 = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data/train_01.tfrecords"
 """
 data_dir =  "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_1" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg" #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg" 
-data_dir1 = "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_2" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg" #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg"
+data_dir1 = "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_4" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg" #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg"
  
-img_dir =   "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_1" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg"
+#img_dir =   "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_1" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg"
+img_dir =   "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_5" # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_dbg"
 
 dir_train_lvar =  data_dir #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_1" # data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
 dir_train_hvar =  data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
 dir_train_lvar1 = data_dir1 #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_1" # data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
 dir_train_hvar1 = data_dir1 # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
-dir_test_lvar =  data_dir # data_dir #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_center/" # data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
-dir_test_hvar =  "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_3" # data_dir #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_center" #  data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
-dir_img =        os.path.join(img_dir,"img") # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main/img"
-dir_result =     os.path.join(data_dir,"result") # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main/result"
+dir_test_lvar =   data_dir # data_dir #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_center/" # data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
+dir_test_hvar =   "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_3" # data_dir #"/home/eyesis/x3d_data/data_sets/tf_data_5x5_center" #  data_dir # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main"
+dir_img =         os.path.join(img_dir,"img") # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main/img"
+dir_result =      os.path.join(data_dir,"result") # "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main/result"
 
 files_train_lvar = ["train000_R2_LE_1.5.tfrecords",
                     "train001_R2_LE_1.5.tfrecords",
@@ -412,6 +451,30 @@ files_train_lvar = ["train000_R2_LE_1.5.tfrecords",
                     "train005_R2_LE_1.5.tfrecords",
                     "train006_R2_LE_1.5.tfrecords",
                     "train007_R2_LE_1.5.tfrecords",
+                    "train008_R2_LE_1.5.tfrecords",
+                    "train009_R2_LE_1.5.tfrecords",
+                    "train010_R2_LE_1.5.tfrecords",
+                    "train011_R2_LE_1.5.tfrecords",
+                    "train012_R2_LE_1.5.tfrecords",
+                    "train013_R2_LE_1.5.tfrecords",
+                    "train014_R2_LE_1.5.tfrecords",
+                    "train015_R2_LE_1.5.tfrecords",
+                    "train016_R2_LE_1.5.tfrecords",
+                    "train017_R2_LE_1.5.tfrecords",
+                    "train018_R2_LE_1.5.tfrecords",
+                    "train019_R2_LE_1.5.tfrecords",
+                    "train020_R2_LE_1.5.tfrecords",
+                    "train021_R2_LE_1.5.tfrecords",
+                    "train022_R2_LE_1.5.tfrecords",
+                    "train023_R2_LE_1.5.tfrecords",
+                    "train024_R2_LE_1.5.tfrecords",
+                    "train025_R2_LE_1.5.tfrecords",
+                    "train026_R2_LE_1.5.tfrecords",
+                    "train027_R2_LE_1.5.tfrecords",
+                    "train028_R2_LE_1.5.tfrecords",
+                    "train029_R2_LE_1.5.tfrecords",
+                    "train030_R2_LE_1.5.tfrecords",
+                    "train031_R2_LE_1.5.tfrecords",
                     ]
 files_train_hvar = ["train000_R2_GT_1.5.tfrecords",
                     "train001_R2_GT_1.5.tfrecords",
@@ -421,6 +484,30 @@ files_train_hvar = ["train000_R2_GT_1.5.tfrecords",
                     "train005_R2_GT_1.5.tfrecords",
                     "train006_R2_GT_1.5.tfrecords",
                     "train007_R2_GT_1.5.tfrecords",
+                    "train008_R2_GT_1.5.tfrecords",
+                    "train009_R2_GT_1.5.tfrecords",
+                    "train010_R2_GT_1.5.tfrecords",
+                    "train011_R2_GT_1.5.tfrecords",
+                    "train012_R2_GT_1.5.tfrecords",
+                    "train013_R2_GT_1.5.tfrecords",
+                    "train014_R2_GT_1.5.tfrecords",
+                    "train015_R2_GT_1.5.tfrecords",
+                    "train016_R2_GT_1.5.tfrecords",
+                    "train017_R2_GT_1.5.tfrecords",
+                    "train018_R2_GT_1.5.tfrecords",
+                    "train019_R2_GT_1.5.tfrecords",
+                    "train020_R2_GT_1.5.tfrecords",
+                    "train021_R2_GT_1.5.tfrecords",
+                    "train022_R2_GT_1.5.tfrecords",
+                    "train023_R2_GT_1.5.tfrecords",
+                    "train024_R2_GT_1.5.tfrecords",
+                    "train025_R2_GT_1.5.tfrecords",
+                    "train026_R2_GT_1.5.tfrecords",
+                    "train027_R2_GT_1.5.tfrecords",
+                    "train028_R2_GT_1.5.tfrecords",
+                    "train029_R2_GT_1.5.tfrecords",
+                    "train030_R2_GT_1.5.tfrecords",
+                    "train031_R2_GT_1.5.tfrecords",
 ]
 files_train_lvar1 = ["train000_R2_LE_1.5.tfrecords",
                     "train001_R2_LE_1.5.tfrecords",
@@ -430,6 +517,22 @@ files_train_lvar1 = ["train000_R2_LE_1.5.tfrecords",
                     "train005_R2_LE_1.5.tfrecords",
                     "train006_R2_LE_1.5.tfrecords",
                     "train007_R2_LE_1.5.tfrecords",
+                    "train008_R2_LE_1.5.tfrecords",
+                    "train009_R2_LE_1.5.tfrecords",
+                    "train010_R2_LE_1.5.tfrecords",
+                    "train011_R2_LE_1.5.tfrecords",
+                    "train012_R2_LE_1.5.tfrecords",
+                    "train013_R2_LE_1.5.tfrecords",
+                    "train014_R2_LE_1.5.tfrecords",
+                    "train015_R2_LE_1.5.tfrecords",
+                    "train016_R2_LE_1.5.tfrecords",
+                    "train017_R2_LE_1.5.tfrecords",
+                    "train018_R2_LE_1.5.tfrecords",
+                    "train019_R2_LE_1.5.tfrecords",
+                    "train020_R2_LE_1.5.tfrecords",
+                    "train021_R2_LE_1.5.tfrecords",
+                    "train022_R2_LE_1.5.tfrecords",
+                    "train023_R2_LE_1.5.tfrecords",
                     ]
 files_train_hvar1 = ["train000_R2_GT_1.5.tfrecords",
                     "train001_R2_GT_1.5.tfrecords",
@@ -439,9 +542,23 @@ files_train_hvar1 = ["train000_R2_GT_1.5.tfrecords",
                     "train005_R2_GT_1.5.tfrecords",
                     "train006_R2_GT_1.5.tfrecords",
                     "train007_R2_GT_1.5.tfrecords",
+                    "train008_R2_GT_1.5.tfrecords",
+                    "train009_R2_GT_1.5.tfrecords",
+                    "train010_R2_GT_1.5.tfrecords",
+                    "train011_R2_GT_1.5.tfrecords",
+                    "train012_R2_GT_1.5.tfrecords",
+                    "train013_R2_GT_1.5.tfrecords",
+                    "train014_R2_GT_1.5.tfrecords",
+                    "train015_R2_GT_1.5.tfrecords",
+                    "train016_R2_GT_1.5.tfrecords",
+                    "train017_R2_GT_1.5.tfrecords",
+                    "train018_R2_GT_1.5.tfrecords",
+                    "train019_R2_GT_1.5.tfrecords",
+                    "train020_R2_GT_1.5.tfrecords",
+                    "train021_R2_GT_1.5.tfrecords",
+                    "train022_R2_GT_1.5.tfrecords",
+                    "train023_R2_GT_1.5.tfrecords",
 ]
-
-
 
 """
 Try again - all hvar training, train than different hvar testing.
@@ -459,8 +576,12 @@ Compare with other (not used) train sets (use 7 of each instead of 8, 8-th as te
 files_test_lvar =  ["train004_R2_GT_1.5.tfrecords"]# ["train007_R2_LE_1.5.tfrecords"]# "testTEST_R2_LE_1.5.tfrecords"] # testTEST_R2_LE_1.5.tfrecords"]
 files_test_hvar =  ["train000_R2_GT_1.5.tfrecords"]#"testTEST_R2_GT_1.5.tfrecords"] # "testTEST_R2_GT_1.5.tfrecords"]
 #files_img =        ['1527257933_150165-v04'] # overlook
-#files_img =        ['1527256858_150165-v01'] # state Street
-files_img =        ['1527256816_150165-v02'] # staete Street
+#files_img =        ['1527256858_150165-v01'] # State Street
+#files_img =        ['1527256816_150165-v02'] # State Street
+#files_img =        ['1527182802_096892-v02'] # plane near
+files_img =        ['1527182805_096892-v02'] # plane midrange
+#files_img =        ['1527182810_096892-v02'] # plane far
+#MAX_FILES_PER_GROUP
 for i, path in enumerate(files_train_lvar):
     files_train_lvar[i]=os.path.join(dir_train_lvar, path)
     
@@ -474,8 +595,6 @@ for i, path in enumerate(files_train_lvar1):
     
 for i, path in enumerate(files_train_hvar1):
     files_train_hvar1[i]=os.path.join(dir_train_hvar1, path)
-
-
     
 for i, path in enumerate(files_test_lvar):
     files_test_lvar[i]=os.path.join(dir_test_lvar, path)
@@ -488,6 +607,7 @@ for i, path in enumerate(files_img):
     files_img[i] =      os.path.join(dir_img,    path+'.tfrecords')
     result_files.append(os.path.join(dir_result, path+"_"+SUFFIX+'.npy'))
 
+files_train = [files_train_lvar,files_train_hvar,files_train_lvar1,files_train_hvar1]
 
 #file_test_hvar=  None
 weight_hvar = 0.26
@@ -522,42 +642,28 @@ pass
 pass
 
 
+
 datasets_train_lvar =  []
 datasets_train_hvar =  []
 datasets_train_lvar1 = []
 datasets_train_hvar1 = []
-for fpath in files_train_lvar:
-    print_time("Importing train data (low variance) from "+fpath, end="")
-    corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-    datasets_train_lvar.append({"corr2d":corr2d,
-                                "target_disparity":target_disparity,
-                                "gt_ds":gt_ds})
-    print_time("  Done")
-for fpath in files_train_hvar:
-    print_time("Importing train data (high variance) from "+fpath, end="")
-    corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-    datasets_train_hvar.append({"corr2d":corr2d,
-                                "target_disparity":target_disparity,
-                                "gt_ds":gt_ds})
-    print_time("  Done")
 
-if TWO_TRAINS:
-    for fpath in files_train_lvar1:
-        print_time("Importing train data1 (low variance) from "+fpath, end="")
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-        datasets_train_lvar1.append({"corr2d":corr2d,
-                                     "target_disparity":target_disparity,
-                                     "gt_ds":gt_ds})
-        print_time("  Done")
-    for fpath in files_train_hvar1:
-        print_time("Importing train data1 (high variance) from "+fpath, end="")
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-        datasets_train_hvar1.append({"corr2d":corr2d,
-                                     "target_disparity":target_disparity,
-                                     "gt_ds":gt_ds})
-        print_time("  Done")
+datasets_train_all = [[],[],[],[]]
+#files_train = [files_train_lvar,files_train_hvar,files_train_lvar1,files_train_hvar1]
 
-
+for n_train, f_train in enumerate(files_train):
+    if len(f_train) and ((n_train<2) or TWO_TRAINS):
+        _setFileSlot(train_next[n_train], len(f_train))
+        for i, fpath in enumerate(f_train):
+            if i >= MAX_FILES_PER_GROUP:
+                break
+            print_time("Importing train data "+(["low variance","high variance", "low variance1","high variance1"][n_train]) +" from "+fpath, end="")
+            corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
+            datasets_train_all[n_train].append({"corr2d":corr2d,
+                                        "target_disparity":target_disparity,
+                                        "gt_ds":gt_ds})
+            _nextFileSlot(train_next[n_train])
+            print_time("  Done")
 
 datasets_test_lvar = []
 for fpath in files_test_lvar:
@@ -586,27 +692,18 @@ center_tile_index = 2 * CLUSTER_RADIUS * (CLUSTER_RADIUS + 1)
 # Reformat input data
 if FILE_TILE_SIDE > TILE_SIDE:
     print_time("Reducing correlation tile size from %d to %d"%(FILE_TILE_SIDE, TILE_SIDE), end="")
-    reduce_tile_size(datasets_train_lvar,  TILE_LAYERS, TILE_SIDE)
-    reduce_tile_size(datasets_train_hvar,  TILE_LAYERS, TILE_SIDE)
-    reduce_tile_size(datasets_train_lvar1, TILE_LAYERS, TILE_SIDE)
-    reduce_tile_size(datasets_train_hvar1, TILE_LAYERS, TILE_SIDE)
+    for d_train in datasets_train_all:
+        reduce_tile_size(d_train,  TILE_LAYERS, TILE_SIDE)
     reduce_tile_size(datasets_test_lvar,   TILE_LAYERS, TILE_SIDE)
     reduce_tile_size(datasets_test_hvar,   TILE_LAYERS, TILE_SIDE)
     print_time("  Done")
 pass
-print_time("Reshaping train data (low variance)", end="")
-reformat_to_clusters(datasets_train_lvar)
-print_time("  Done")
-print_time("Reshaping train data (high variance)", end="")
-reformat_to_clusters(datasets_train_hvar)
-print_time("  Done")
 
-print_time("Reshaping train data1 (low variance)", end="")
-reformat_to_clusters(datasets_train_lvar1)
-print_time("  Done")
-print_time("Reshaping train data1 (high variance)", end="")
-reformat_to_clusters(datasets_train_hvar1)
-print_time("  Done")
+# Reformat to 1/9/25 tile clusters
+for n_train, d_train in enumerate(datasets_train_all):
+    print_time("Reshaping train data ("+(["low variance","high variance", "low variance1","high variance1"][n_train])+") ", end="")
+    reformat_to_clusters(d_train)
+    print_time("  Done")
 
 print_time("Reshaping test data (low variance)", end="")
 reformat_to_clusters(datasets_test_lvar)
@@ -621,15 +718,9 @@ datasets_train_lvar & datasets_train_hvar ( that will increase batch size and pl
 test has to have even original, batches will not zip - just use two batches for one big one
 """
 
-
-
-datasets_train_list =      [datasets_train_lvar,  datasets_train_hvar]
-if TWO_TRAINS:
-    datasets_train_list += [datasets_train_lvar1, datasets_train_hvar1]
-
 if ZIP_LHVAR:
     print_time("Zipping together datasets datasets_train_lvar and datasets_train_hvar", end="")
-    datasets_train = zip_lvar_hvar(datasets_train_list, del_src = True) # no shuffle, delete src
+    datasets_train = zip_lvar_hvar(datasets_train_all, del_src = True) # no shuffle, delete src
     print_time("  Done")
 else:
     #Alternate lvar/hvar
@@ -970,11 +1061,19 @@ def weightsLoss(inp_weights):       # [batch_size,(1..2)] tf_result
 #    w_neib = tf.const([[weight_diag,  weight_ortho, weight_diag],
 #                       [weight_ortho, -1.0,         weight_ortho],
 #                       [weight_diag,  weight_ortho, weight_diag]])
+    #WBORDERS_ZERO
     with tf.name_scope("WeightsLoss"):
         # Adding 1 tile border
         tf_inp =     tf.reshape(inp_weights[:TILE_LAYERS * TILE_SIZE,:], [TILE_LAYERS, FILE_TILE_SIDE, FILE_TILE_SIDE, inp_weights.shape[1]], name = "tf_inp")
-        tf_inp_ext_h = tf.concat([tf_inp       [:, :,  :1, :], tf_inp,       tf_inp      [:,   :, -1:, :]], axis = 2, name ="tf_inp_ext_h")
-        tf_inp_ext   = tf.concat([tf_inp_ext_h [:, :1, :,  :], tf_inp_ext_h, tf_inp_ext_h[:, -1:,   :, :]], axis = 1, name ="tf_inp_ext")
+        if WBORDERS_ZERO:
+            tf_zero_col = tf.constant(0.0, dtype=tf.float32, shape=[tf_inp.shape[0], tf_inp.shape[1], 1,               tf_inp.shape[3]], name = "tf_zero_col")
+            tf_zero_row = tf.constant(0.0, dtype=tf.float32, shape=[tf_inp.shape[0], 1 ,              tf_inp.shape[2], tf_inp.shape[3]], name = "tf_zero_row")
+            tf_inp_ext_h = tf.concat([tf_zero_col,                 tf_inp,       tf_zero_col                 ], axis = 2, name ="tf_inp_ext_h")
+            tf_inp_ext   = tf.concat([tf_zero_row,                 tf_inp_ext_h, tf_zero_row                 ], axis = 1, name ="tf_inp_ext")
+        else:
+            tf_inp_ext_h = tf.concat([tf_inp       [:, :,  :1, :], tf_inp,       tf_inp      [:,   :, -1:, :]], axis = 2, name ="tf_inp_ext_h")
+            tf_inp_ext   = tf.concat([tf_inp_ext_h [:, :1, :,  :], tf_inp_ext_h, tf_inp_ext_h[:, -1:,   :, :]], axis = 1, name ="tf_inp_ext")
+        
         s_ortho = tf_inp_ext[:,1:-1,:-2,:] + tf_inp_ext[:,1:-1, 2:,:] + tf_inp_ext[:,1:-1,:-2,:] + tf_inp_ext[:,1:-1, 2:, :] 
         s_corn =  tf_inp_ext[:, :-2,:-2,:] + tf_inp_ext[:, :-2, 2:,:] + tf_inp_ext[:,2:,  :-2,:] + tf_inp_ext[:,2:  , 2:, :]
         w_diff =  tf.subtract(tf_inp, s_ortho * weight_ortho + s_corn * weight_diag, name="w_diff") 
@@ -1020,7 +1119,7 @@ if WLOSS_LAMBDA > 0.0:
     GW_loss =    tf.add(G_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
 else:
     GW_loss = G_loss
-    W_loss =     0.0
+    W_loss =     tf.constant(0.0, dtype=tf.float32,name = "W_loss")
 #debug
 GT_variance =  debug_gt_variance(indx = 0,        # This tile index (0..8)
                                  center_indx = 4, # center tile index
@@ -1056,7 +1155,7 @@ G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(GW_loss)
 
 saver=tf.train.Saver()
 
-ROOT_PATH  = './attic/nn_ds_neibs8_graph'+SUFFIX+"/"
+ROOT_PATH  = './attic/nn_ds_neibs9_graph'+SUFFIX+"/"
 TRAIN_PATH =  ROOT_PATH + 'train'
 TEST_PATH  =  ROOT_PATH + 'test'
 TEST_PATH1  = ROOT_PATH + 'test1'
@@ -1108,7 +1207,69 @@ with tf.Session()  as sess:
     img_gain_test9 =  1.0
     
     num_train_variants = len(datasets_train)
+    thr=None;
+    trains_to_update = [train_next[n_train]['files'] > train_next[n_train]['slots'] for n_train in range(len(train_next))]
     for epoch in range (EPOCHS_TO_RUN):
+        """
+        update files after each epoch, all 4.
+        Convert to threads after testing
+        """
+        if (FILE_UPDATE_EPOCHS > 0) and (epoch % FILE_UPDATE_EPOCHS == 0):
+            if not thr is None:
+                if thr.is_alive():
+                    print_time("Waiting until tfrecord gets loaded", end=" ")
+                else:
+                    print_time("tfrecord is already loaded loaded", end=" ")
+        
+                thr.join()
+                print_time("Done")
+                print_time("Inserting new data", end=" ")
+                for n_train in range(len(trains_to_update)):
+                    if trains_to_update[n_train]:
+                        replaceNextDataset(datasets_train,
+                                           thr_result[n_train],
+                                           train_next= train_next[n_train],
+                                           nset=n_train,
+                                           period=len(train_next))
+                        _nextFileSlot(train_next[n_train])
+                print_time("Done")
+            thr_result = []
+            fpaths = []
+            for n_train in range(len(train_next)):
+                if train_next[n_train]['files'] > train_next[n_train]['slots']:
+                    fpaths.append(files_train[n_train][train_next[n_train]['file']])
+                    print_time("Will read in background: "+fpaths[-1])
+            thr = Thread(target=getMoreFiles, args=(fpaths,thr_result))            
+            thr.start()        
+        """    
+        for n_train in range(len(train_next)):
+            if train_next[n_train]['files'] > train_next[n_train]['slots']:
+                fpath = files_train[n_train][train_next[n_train]['file']]
+                print_time("Importing train data "+(["low variance","high variance", "low variance1","high variance1"][n_train]) +" from "+fpath, end="")
+                corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
+                datasets_train_new = {"corr2d":           corr2d,
+                                      "target_disparity": target_disparity,
+                                      "gt_ds":            gt_ds}
+                print_time("  Done")
+                if FILE_TILE_SIDE > TILE_SIDE:
+                    print_time("Reducing correlation tile size from %d to %d"%(FILE_TILE_SIDE, TILE_SIDE), end="")
+                    reduce_tile_size([datasets_train_new],   TILE_LAYERS, TILE_SIDE)
+                    print_time("  Done")
+                
+                # Reformat to 1/9/25 tile clusters
+                print_time("Reshaping train data ("+(["low variance","high variance", "low variance1","high variance1"][n_train])+") ", end="")
+                reformat_to_clusters([datasets_train_new])
+                print_time("  Done")
+                
+                replaceNextDataset(datasets_train,
+                                   datasets_train_new,
+                                   train_next= train_next[n_train],
+                                   nset=n_train,
+                                   period=len(train_next))
+                
+                _nextFileSlot(train_next[n_train])
+                print_time("  Done")
+        """
 #        file_index = (epoch // 20) % 2 
         file_index = epoch  % num_train_variants
         if   epoch >=600:
@@ -1123,7 +1284,7 @@ with tf.Session()  as sess:
             learning_rate = LR
 #        print ("sr1",file=sys.stderr,end=" ")
         if (file_index == 0) and SHUFFLE_FILES:
-            num_sets = len(datasets_train_list)
+            num_sets = len(datasets_train_all)
             print_time("Shuffling how datasets datasets_train_lvar and datasets_train_hvar are zipped together", end="")
             for i in range(num_sets):
                 shuffle_in_place (datasets_train, i, num_sets)
@@ -1160,7 +1321,7 @@ with tf.Session()  as sess:
                                tf_ph_sq_diff: train2_avg,
                                tf_gtvar_diff: gtvar_train_avg,
                                tf_img_test0:  img_gain_test0,
-                               tf_img_test9:img_gain_test9}) # previous value of *_avg
+                               tf_img_test9:  img_gain_test9}) # previous value of *_avg #Fetch argument 0.0 has invalid type <class 'float'>, must be a string or Tensor. (Can not convert a float into a Tensor or Operation.)
                 
                 loss_gw_train_hist[i] = GW_loss_trained
                 loss_g_train_hist[i] =  G_loss_trained

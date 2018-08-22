@@ -76,7 +76,7 @@ def writeTFRewcordsImageTiles(img_path, tfr_filename): # test_set=False):
       num_tiles = 242*324 # fixme
       all_image_tiles = np.array(range(num_tiles))
       corr_layers =  ['hor-pairs', 'vert-pairs','diagm-pair', 'diago-pair']
-      img =          ijt.imagej_tiff(test_corr, corr_layers, all_image_tiles)
+      img =          ijt.imagej_tiff(img_path, corr_layers, all_image_tiles)
 
       corr2d =           img.corr2d.reshape((num_tiles,-1))
       target_disparity = img.target_disparity.reshape((num_tiles,-1))
@@ -493,7 +493,7 @@ class ExploreData:
                 if nchoices >= min_choices: # use minimum of extra files
                     break;
             while len(tl)==0:
-                print("** BUG! could not find a single candidate from files ",flist," for cell "+nt)
+                print("** BUG! could not find a single candidate from files ",flist," for cell ",nt)
                 print("trying to use some other cell")
                 nt1 = np.random.randint(0,self.num_batch_tiles.shape[1])
                 for findx in flist:
@@ -753,7 +753,7 @@ ValueError: need at least one array to concatenate
 
 
 
-    def writeTFRewcordsEpoch(self, tfr_filename, ml_list, files_list = None, set_ds= None, radius = 0): # test_set=False):
+    def writeTFRewcordsEpoch(self, tfr_filename, ml_list, files_list = None, set_ds= None, radius = 0, num_scenes = None): # test_set=False):
 #        train_filename = 'train.tfrecords'  # address to save the TFRecords file
         # open the TFRecords file
         if not  '.tfrecords' in tfr_filename:
@@ -777,7 +777,10 @@ ValueError: need at least one array to concatenate
             return     
         writer = tf.python_io.TFRecordWriter(tfr_filename)
 #$        files_list = [self.files_train, self.files_test][test_set]
-        seed_list = np.arange(len(files_list))
+        if num_scenes is None:
+            num_scenes = len(files_list)
+        seed_list = np.arange(num_scenes) % len(files_list)
+#        seed_list = np.arange(len(files_list))
         np.random.shuffle(seed_list)
         cluster_size = (2 * radius + 1) * (2 * radius + 1)
         for nscene, seed_index in enumerate(seed_list):
@@ -815,7 +818,7 @@ ValueError: need at least one array to concatenate
                 example = tf.train.Example(features=tf.train.Features(feature=d_feature))
                 writer.write(example.SerializeToString())
             if (self.debug_level > 0):
-                print_time("Scene %d of %d -> %s"%(nscene, len(seed_list), tfr_filename))        
+                print_time("Scene %d (%d) of %d -> %s"%(nscene, seed_index, len(seed_list), tfr_filename))        
         writer.close()
         sys.stdout.flush()        
 
@@ -904,7 +907,7 @@ if __name__ == "__main__":
   except IndexError:
 #      pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
 #      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5" #no trailing "/"
-      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_4" #no trailing "/"
+      pathTFR = "/home/eyesis/x3d_data/data_sets/tf_data_5x5_main_5" #no trailing "/"
 
   try:
       ml_subdir =   sys.argv[4]
@@ -914,14 +917,20 @@ if __name__ == "__main__":
       
       
 #  pathTFR = "/mnt/dde6f983-d149-435e-b4a2-88749245cc6c/home/eyesis/x3d_data/data_sets/tf_data_3x3b" #no trailing "/"
-#  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
-  test_corr = '/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527256816_150165/v02/mlr32_18a/1527256816_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'
-#  test_corr = '/home/eyesis/x3d_data/models/dsi_combo_and_ml_all/state_street/1527256858_150165/v01/mlr32_18a/1527256858_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'  
-  #Parameters to generate neighbors data. Set radius to 0 to generate single-tile     
+#  test_corr = '/home/eyesis/x3d_data/models/var_main/www/html/x3domlet/models/all-clean/overlook/1527257933_150165/v04/mlr32_18a/1527257933_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff' # overlook
+#  test_corr = '/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527256816_150165/v02/mlr32_18a/1527256816_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff' # State Street
+#  test_corr = '/home/eyesis/x3d_data/models/dsi_combo_and_ml_all/state_street/1527256858_150165/v01/mlr32_18a/1527256858_150165-ML_DATA-32B-O-FZ0.05-MAIN.tiff'   # State Street
+  test_corrs = ['/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527182802_096892/v02/mlr32_18a/1527182802_096892-ML_DATA-32B-O-FZ0.05-MAIN.tiff', # near plane"
+                '/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527182805_096892/v02/mlr32_18a/1527182805_096892-ML_DATA-32B-O-FZ0.05-MAIN.tiff', # medium plane"
+                '/home/eyesis/x3d_data/data_sets/test_mlr32_18a/1527182810_096892/v02/mlr32_18a/1527182810_096892-ML_DATA-32B-O-FZ0.05-MAIN.tiff', # far plane
+                ]
+
+  #Parameters to generate neighbors data. Set radius to 0 to generate single-tile
+  TEST_SAME_LENGTH_AS_TRAIN = True # make test to have same number of entries as train ones     
   RADIUS = 2 # 5x5
   MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid == 9
   VARIANCE_THRESHOLD = 1.5
-  NUM_TRAIN_SETS =     24 # 8
+  NUM_TRAIN_SETS =     32 # 8
  
   if RADIUS == 0:
     BATCH_DISP_BINS = 50 # 1000 * 1
@@ -980,6 +989,16 @@ if __name__ == "__main__":
 #  RADIUS = 1
 #  MIN_NEIBS = (2 * RADIUS + 1) * (2 * RADIUS + 1) # All tiles valid
 #  VARIANCE_THRESHOLD = 1.5
+  for test_corr in test_corrs:
+      scene = os.path.basename(test_corr)[:17]
+      scene_version= os.path.basename(os.path.dirname(os.path.dirname(test_corr)))
+      fname =scene+'-'+scene_version 
+      img_filenameTFR = os.path.join(pathTFR,'img',fname)
+      print_time("Saving test image %s as tiles..."%(img_filenameTFR),end = " ")        
+      writeTFRewcordsImageTiles(test_corr, img_filenameTFR)
+      print_time("Done")        
+      pass
+
 
   if (RADIUS > 0):
       disp_var_test,  num_neibs_test =  ex_data.exploreNeibs(ex_data.test_ds, RADIUS)
@@ -1011,6 +1030,8 @@ if __name__ == "__main__":
   
   ml_list_train=ex_data.getMLList(ml_subdir, ex_data.files_train)
   ml_list_test= ex_data.getMLList(ml_subdir, ex_data.files_test)
+  num_test_scenes = [ex_data.files_test, ex_data.files_train][TEST_SAME_LENGTH_AS_TRAIN]    
+          
 
   if RADIUS == 0 :
       list_of_file_lists_train, num_batch_tiles_train = ex_data.makeBatchLists( # results are also saved to self.*
@@ -1034,7 +1055,7 @@ if __name__ == "__main__":
           max_var =      VARIANCE_THRESHOLD, # Maximal tile variance to include
           min_neibs =    MIN_NEIBS)          # Minimal number of valid tiles to include
       fpath =  test_filenameTFR # +("-%03d"%(train_var,))
-      ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_test, set_ds= ex_data.test_ds)
+      ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_train, files_list = ex_data.files_test, set_ds= ex_data.test_ds,  num_scenes =  num_test_scenes)
       pass
   else: # RADIUS > 0
       # train
@@ -1079,7 +1100,7 @@ if __name__ == "__main__":
               print("Number of <= %f disparity variance tiles: %d (est)"%(VARIANCE_THRESHOLD, num_le_test))
         
               fpath =  test_filenameTFR +("TEST_R%d_LE%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
-              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
+              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS, num_scenes =  num_test_scenes)
         
               list_of_file_lists_test, num_batch_tiles_test = ex_data.makeBatchLists( # results are also saved to self.*
               data_ds =      ex_data.test_ds,
@@ -1092,8 +1113,9 @@ if __name__ == "__main__":
               high_fract_test = 1.0 * num_gt_test / (num_le_test + num_gt_test)
               print("Number of > %f disparity variance tiles: %d, fraction = %f (test)"%(VARIANCE_THRESHOLD, num_gt_test, high_fract_test))
               fpath =  test_filenameTFR +("TEST_R%d_GT%4.1f"%(RADIUS,VARIANCE_THRESHOLD))
-              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS)
+              ex_data.writeTFRewcordsEpoch(fpath, ml_list = ml_list_test, files_list = ex_data.files_test, set_ds= ex_data.test_ds, radius = RADIUS,  num_scenes =  num_test_scenes)
   plt.show()
+  """              
   scene = os.path.basename(test_corr)[:17]
   scene_version= os.path.basename(os.path.dirname(os.path.dirname(test_corr)))
   fname =scene+'-'+scene_version 
@@ -1102,6 +1124,6 @@ if __name__ == "__main__":
   writeTFRewcordsImageTiles(test_corr, img_filenameTFR)
   print_time("Done")        
   pass
-  
+  """
   pass
     
