@@ -58,17 +58,17 @@ SHUFFLE_EPOCH =    True
 NET_ARCH1 =       0 # 4 # #4 # 8 # 4 # 0 #3 # 0 #  0 # 0 # 0 # 8 # 0 # 7 # 2 #0 # 6 #0 # 4 # 3 # overwrite with argv?
 NET_ARCH2 =       0 # 4 # 0 # 0 # 4 # 0 # 0 # 3 #  0 # 3 # 0 # 3 # 0 # 2 #0 # 6 # 0 # 3 # overwrite with argv?
 SYM8_SUB =        False # True #False #  True # False # True # False # True # False # enforce inputs from 2d correlation have symmetrical ones (groups of 8)
-ONLY_TILE =        12 # None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
+ONLY_TILE =        None # 4 # None # 0 # 4# None # (remove all but center tile data), put None here for normal operation)
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements 
 #DEBUG_PACK_TILES = True
 # CLUSTER_RADIUS should match input data
 CLUSTER_RADIUS =     2 # 1 # 1 - 3x3, 2 - 5x5 tiles
 SHUFFLE_FILES  =     True
-WLOSS_LAMBDA =       2.0 #3.0 # 1.0 # 0.3 # 0.0 # 50.0 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
+WLOSS_LAMBDA =       0.5 #3.0 # 1.0 # 0.3 # 0.0 # 50.0 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
 WBORDERS_ZERO =      True # Border conditions for first layer weights: False - free, True - tied to 0
 MAX_FILES_PER_GROUP = 6 # just to try, normally should be 8
 FILE_UPDATE_EPOCHS =  2 # update train files each this many epochs. 0 - do not update
-
+PARTIALS_WEIGHTS = [1.0,1.0,1.0] # weight of full 5x5, center 3x3 and center 1x1. len(PARTIALS_WEIGHTS) == CLUSTER_RADIUS + 1. Set to None
 
 SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY]) +(["NS","S8"][SYM8_SUB])+"LMBD"+str(WLOSS_LAMBDA)
 
@@ -84,6 +84,7 @@ NN_LAYOUTS = {0:[0,   0,   0,   32,  20,  16],
               }
 NN_LAYOUT1 = NN_LAYOUTS[NET_ARCH1]
 NN_LAYOUT2 = NN_LAYOUTS[NET_ARCH2]
+USE_PARTIALS =      not PARTIALS_WEIGHTS is None # False - just a single Siamese net, True - partial outputs that use concentric squares of the first level subnets
 
 #http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
 class bcolors:
@@ -410,7 +411,13 @@ def eval_results(rslt_path, absolute,
             min_disparity, max_disparity, max_offset_target,  max_offset_result, strength_pow, rms0, rms1, rms0/rms1, good_tiles.sum() ))
         rslt.append([rms0,rms1])
     return rslt 
-    
+
+def concentricSquares(radius):
+    side = 2 * radius + 1
+    return [[((i // side) >= var) and
+             ((i // side) < (side - var)) and
+             ((i % side)  >= var) and
+             ((i % side)  < (side - var))  for i in range (side*side) ] for var in range(radius+1)]    
                          
 
 """
@@ -613,6 +620,13 @@ files_train = [files_train_lvar,files_train_hvar,files_train_lvar1,files_train_h
 #file_test_hvar=  None
 weight_hvar = 0.26
 weight_lvar = 1.0 - weight_hvar 
+partials = None
+partials = concentricSquares(CLUSTER_RADIUS)
+PARTIALS_WEIGHTS = [1.0*pw/sum(PARTIALS_WEIGHTS) for pw in PARTIALS_WEIGHTS]
+if not USE_PARTIALS:
+    partials = partials[0:1]
+    PARTIALS_WEIGHTS = [1.0]
+
 
 
 import tensorflow as tf
@@ -878,7 +892,7 @@ def network_sub(input, layout, reuse, sym8 = False):
            
     return fc[-1], inp_weights
 
-def network_inter(input, layout):
+def network_inter(input, layout, reuse=False):
     last_indx = None;
     fc = []
     for i, num_outs in enumerate (layout):
@@ -887,39 +901,52 @@ def network_inter(input, layout):
                inp = fc[-1]
            else:
                inp = input
-           fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_inter'+str(i)))
+           fc.append(slim.fully_connected(inp,    num_outs, activation_fn=lrelu, scope='g_fc_inter'+str(i), reuse = reuse))
     if USE_CONFIDENCE:
-        fc_out  = slim.fully_connected(fc[-1],     2, activation_fn=lrelu,scope='g_fc_inter_out')
+        fc_out  = slim.fully_connected(fc[-1],     2, activation_fn=lrelu, scope='g_fc_inter_out', reuse = reuse)
     else:     
-        fc_out  = slim.fully_connected(fc[-1],     1, activation_fn=None,scope='g_fc_inter_out')
+        fc_out  = slim.fully_connected(fc[-1],     1, activation_fn=None, scope='g_fc_inter_out', reuse = reuse)
         #If using residual disparity, split last layer into 2 or remove activation and add rectifier to confidence only  
     return fc_out
 
-def network_siam(input, # now [?,9,325]-> [?,25,325]
+def networks_siam(input, # now [?,9,325]-> [?,25,325]
                  layout1, 
                  layout2,
                  sym8 =        False,
-                 only_tile =   None): # just for debugging - feed only data from the center sub-network
+                 only_tile =   None, # just for debugging - feed only data from the center sub-network
+                 partials =    None): 
     with tf.name_scope("Siam_net"):
         inp_weights = []
-        num_legs =  input.shape[1] # == 9
-        inter_list = []
+        num_legs =  input.shape[1] # == 25
+        if partials is None:
+            partials = [[True] * num_legs]
+#        inter_list = []
+        inter_lists = [[] for _ in partials]
         reuse = False
         for i in range (num_legs):
-            if (only_tile is None) or (i == only_tile):
-#                inter_list.append(network_sub(input[:,i,:],
-#                                          layout= layout1,
-#                                          reuse= reuse,
-#                                          sym8 = sym8))
+            if ((only_tile is None) or (i == only_tile)) and any([p[i] for p in partials]) :
                 ns, ns_weights = network_sub(input[:,i,:],
                                           layout= layout1,
                                           reuse= reuse,
                                           sym8 = sym8)
-                inter_list.append(ns)
+                for n, partial in enumerate(partials):
+                    if partial[i]:
+                        inter_lists[n].append(ns)
+                    else:
+#                        inter_lists[n].append(tf.constant(0.0,dtype=tf.float32, shape=ns.shape))
+#                        inter_lists[n].append(ns * 0.0)
+                        inter_lists[n].append(tf.zeros_like(ns))
+#                inter_list.append(ns)
                 inp_weights += ns_weights
                 reuse = True
-        inter_tensor = tf.concat(inter_list, 1, name='inter_tensor')
-        return  network_inter (inter_tensor, layout2),  inp_weights 
+        outs = []         
+        for n, _ in enumerate(partials):
+#            outs.append(network_inter (tf.concat(inter_list, 1, name='inter_tensor'+str(n)), layout2, reuse = (n > 0)))
+            outs.append(network_inter (tf.concat(inter_lists[n], 1, name='inter_tensor'+str(n)), layout2, reuse = (n > 0)))
+#            inter_tensors.append(tf.concat(inter_list, 1, name='inter_tensor'+str(n)))
+#        inter_tensor = tf.concat(inter_list, 1, name='inter_tensor')
+#        return  network_inter (inter_tensor, layout2),  inp_weights 
+        return  outs,  inp_weights 
 
 def debug_gt_variance(
         indx,        # This tile index (0..8)
@@ -1088,21 +1115,31 @@ def weightsLoss(inp_weights):       # [batch_size,(1..2)] tf_result
     
 corr2d_Nx325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,FEATURES_PER_TILE], name="coor2d_cluster"),
                           tf.reshape(next_element_tt['target_disparity'], [-1,cluster_size, 1], name="targdisp_cluster")], axis=2, name = "corr2d_Nx325")
-
+"""
 out, inp_weights =       network_siam(input=corr2d_Nx325,
                                       layout1 =   NN_LAYOUT1, 
                                       layout2 =   NN_LAYOUT2,
                                       sym8 =      SYM8_SUB,
                                       only_tile = ONLY_TILE) #Remove/put None for normal operation
+"""                                      
+outs, inp_weights =       networks_siam(input=corr2d_Nx325,
+                                        layout1 =   NN_LAYOUT1, 
+                                        layout2 =   NN_LAYOUT2,
+                                        sym8 =      SYM8_SUB,
+                                        only_tile = ONLY_TILE, #Remove/put None for normal operation
+                                        partials =  partials)                                         
 #            w_slice = tf.reshape(gt_ds_batch[:,1],[-1],                     name = "w_gt_slice")
 
 # Extract target disparity and GT corresponding to the center tile (reshape - just to name)
 #target_disparity_batch_center = tf.reshape(next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1] , [-1,1],  name = "target_center")
 #gt_ds_batch_center =            tf.reshape(next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * center_tile_index+1],    [-1,2],  name = "gt_ds_center")
-
-G_loss, _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _cost1 = batchLoss(out_batch =         out,        # [batch_size,(1..2)] tf_result
-              target_disparity_batch=  next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1], # target_disparity_batch_center, # next_element_tt['target_disparity'], # target_disparity, ### target_d,   # [batch_size]        tf placeholder
-              gt_ds_batch =            next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)],  # gt_ds_batch_center, ## next_element_tt['gt_ds'], # gt_ds, ### gt,         # [batch_size,2]      tf placeholder
+tf_partial_weights = tf.constant(PARTIALS_WEIGHTS,dtype=tf.float32,name="partial_weights")
+G_losses = [0.0]*len(partials)
+target_disparity_batch=  next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1]
+gt_ds_batch =            next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)]
+G_losses[0], _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _cost1 = batchLoss(out_batch =         outs[0],        # [batch_size,(1..2)] tf_result
+              target_disparity_batch=  target_disparity_batch, # next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1], # target_disparity_batch_center, # next_element_tt['target_disparity'], # target_disparity, ### target_d,   # [batch_size]        tf placeholder
+              gt_ds_batch =            gt_ds_batch, # next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)],  # gt_ds_batch_center, ## next_element_tt['gt_ds'], # gt_ds, ### gt,         # [batch_size,2]      tf placeholder
               absolute_disparity =     ABSOLUTE_DISPARITY,
               use_confidence =         USE_CONFIDENCE, # True, 
               lambda_conf_avg =        0.01,
@@ -1115,18 +1152,40 @@ G_loss, _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _
               disp_wmax =              8.0,    # maximal disparity to apply weight boosting for small disparities
               use_out =                False)  # use calculated disparity for disparity weight boosting (False - use target disparity)
 
+G_loss = G_losses[0]
+for n in range (1,len(partials)):
+    G_losses[n], _, _, _, _, _, _, _ = batchLoss(out_batch =         outs[n],        # [batch_size,(1..2)] tf_result
+              target_disparity_batch=  target_disparity_batch, #next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1], # target_disparity_batch_center, # next_element_tt['target_disparity'], # target_disparity, ### target_d,   # [batch_size]        tf placeholder
+              gt_ds_batch =            gt_ds_batch, # next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)],  # gt_ds_batch_center, ## next_element_tt['gt_ds'], # gt_ds, ### gt,         # [batch_size,2]      tf placeholder
+              absolute_disparity =     ABSOLUTE_DISPARITY,
+              use_confidence =         USE_CONFIDENCE, # True, 
+              lambda_conf_avg =        0.01,
+              lambda_conf_pwr =        0.1,
+              conf_pwr =               2.0,
+              gt_conf_offset =         0.08,
+              gt_conf_pwr =            2.0,
+              error2_offset =          0, # 0.0025, # (0.05^2)
+              disp_wmin =              1.0,    # minimal disparity to apply weight boosting for small disparities
+              disp_wmax =              8.0,    # maximal disparity to apply weight boosting for small disparities
+              use_out =                False)  # use calculated disparity for disparity weight boosting (False - use target disparity)
+#    G_loss +=  Glosses[n]*PARTIALS_WEIGHTS[n]
+#tf_partial_weights
+tf_wlosses = tf.multiply(G_losses, tf_partial_weights, name =  "tf_wlosses")
+G_losses_sum = tf.reduce_sum(tf_wlosses, name = "G_losses_sum")
 if WLOSS_LAMBDA > 0.0:   
     W_loss =     weightsLoss(inp_weights[0]) #    inp_weights - list of tensors, currently - just [0]
-    GW_loss =    tf.add(G_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
+#    GW_loss =    tf.add(G_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
+    GW_loss =    tf.add(G_losses_sum, WLOSS_LAMBDA * W_loss, name = "GW_loss")
 else:
-    GW_loss = G_loss
+    GW_loss = G_losses_sum # G_loss
     W_loss =     tf.constant(0.0, dtype=tf.float32,name = "W_loss")
 #debug
 GT_variance =  debug_gt_variance(indx = 0,        # This tile index (0..8)
                                  center_indx = 4, # center tile index
                                  gt_ds_batch = next_element_tt['gt_ds'])# [?:18]
               
-tf_ph_G_loss =  tf.placeholder(tf.float32,shape=None,name='G_loss_avg')
+tf_ph_G_loss =    tf.placeholder(tf.float32,shape=None,name='G_loss_avg')
+tf_ph_G_losses =  tf.placeholder(tf.float32,shape=[len(partials)],name='G_losses_avg')
 tf_ph_W_loss =  tf.placeholder(tf.float32,shape=None,name='W_loss_avg')
 tf_ph_GW_loss = tf.placeholder(tf.float32,shape=None,name='GW_loss_avg')
 tf_ph_sq_diff = tf.placeholder(tf.float32,shape=None,name='sq_diff_avg')
@@ -1141,6 +1200,11 @@ with tf.name_scope('sample'):
     tf.summary.scalar("gtvar_diff",   GT_variance)
     
 with tf.name_scope('epoch_average'):
+#    for i, tl in enumerate(tf_ph_G_losses):
+#       tf.summary.scalar("GW_loss_epoch_"+str(i), tl)
+    for i in range(tf_ph_G_losses.shape[0]):
+        tf.summary.scalar("G_loss_epoch_"+str(i), tf_ph_G_losses[i])
+        
     tf.summary.scalar("GW_loss_epoch", tf_ph_GW_loss)
     tf.summary.scalar("G_loss_epoch",  tf_ph_G_loss)
     tf.summary.scalar("W_loss_epoch",  tf_ph_W_loss)
@@ -1156,7 +1220,7 @@ G_opt=tf.train.AdamOptimizer(learning_rate=lr).minimize(GW_loss)
 
 saver=tf.train.Saver()
 
-ROOT_PATH  = './attic/nn_ds_neibs9_graph'+SUFFIX+"/"
+ROOT_PATH  = './attic/nn_ds_neibs10_graph'+SUFFIX+"/"
 TRAIN_PATH =  ROOT_PATH + 'train'
 TEST_PATH  =  ROOT_PATH + 'test'
 TEST_PATH1  = ROOT_PATH + 'test1'
@@ -1181,19 +1245,28 @@ with tf.Session()  as sess:
     
     loss_gw_train_hist=  np.empty(dataset_train_size, dtype=np.float32)
     loss_g_train_hist=   np.empty(dataset_train_size, dtype=np.float32)
+    
+    loss_g_train_hists=   [np.empty(dataset_train_size, dtype=np.float32) for p in partials]
+    
+    
     loss_w_train_hist=   np.empty(dataset_train_size, dtype=np.float32)
     
     loss_gw_test_hist=  np.empty(dataset_test_size, dtype=np.float32)
     loss_g_test_hist=   np.empty(dataset_test_size, dtype=np.float32)
+    loss_g_test_hists=   [np.empty(dataset_test_size, dtype=np.float32) for p in partials]
+    
     loss_w_test_hist=   np.empty(dataset_test_size, dtype=np.float32)
     
     loss2_train_hist= np.empty(dataset_train_size, dtype=np.float32)
     loss2_test_hist=  np.empty(dataset_test_size, dtype=np.float32)
     train_gw_avg = 0.0
     train_g_avg =  0.0
+    train_g_avgs =  [0.0]*len(partials)
+    
     train_w_avg =  0.0
     test_gw_avg =  0.0     
     test_g_avg =   0.0     
+    test_g_avgs =  [0.0]*len(partials)
     test_w_avg =   0.0     
 
     train2_avg = 0.0
@@ -1242,36 +1315,6 @@ with tf.Session()  as sess:
                     print_time("Will read in background: "+fpaths[-1])
             thr = Thread(target=getMoreFiles, args=(fpaths,thr_result))            
             thr.start()        
-        """    
-        for n_train in range(len(train_next)):
-            if train_next[n_train]['files'] > train_next[n_train]['slots']:
-                fpath = files_train[n_train][train_next[n_train]['file']]
-                print_time("Importing train data "+(["low variance","high variance", "low variance1","high variance1"][n_train]) +" from "+fpath, end="")
-                corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-                datasets_train_new = {"corr2d":           corr2d,
-                                      "target_disparity": target_disparity,
-                                      "gt_ds":            gt_ds}
-                print_time("  Done")
-                if FILE_TILE_SIDE > TILE_SIDE:
-                    print_time("Reducing correlation tile size from %d to %d"%(FILE_TILE_SIDE, TILE_SIDE), end="")
-                    reduce_tile_size([datasets_train_new],   TILE_LAYERS, TILE_SIDE)
-                    print_time("  Done")
-                
-                # Reformat to 1/9/25 tile clusters
-                print_time("Reshaping train data ("+(["low variance","high variance", "low variance1","high variance1"][n_train])+") ", end="")
-                reformat_to_clusters([datasets_train_new])
-                print_time("  Done")
-                
-                replaceNextDataset(datasets_train,
-                                   datasets_train_new,
-                                   train_next= train_next[n_train],
-                                   nset=n_train,
-                                   period=len(train_next))
-                
-                _nextFileSlot(train_next[n_train])
-                print_time("  Done")
-        """
-#        file_index = (epoch // 20) % 2 
         file_index = epoch  % num_train_variants
         if   epoch >=600:
             learning_rate = LR600
@@ -1299,13 +1342,15 @@ with tf.Session()  as sess:
                                                      gt_ds_train_placeholder:            datasets_train[file_index]['gt_ds']})
         for i in range(dataset_train_size):
             try:
-                train_summary,_, GW_loss_trained,  G_loss_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
+#                train_summary,_, GW_loss_trained,  G_loss_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
+                train_summary,_, GW_loss_trained,  G_losses_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
                     [   merged,
                         G_opt,
                         GW_loss,
-                        G_loss,
+#                        G_loss,
+                        G_losses,
                         W_loss,
-                        out,
+                        outs[0],
                         _disp_slice,
                         _d_gt_slice,
                         _out_diff,
@@ -1317,7 +1362,8 @@ with tf.Session()  as sess:
                     ],
                     feed_dict={lr:            learning_rate,
                                tf_ph_GW_loss: train_gw_avg,
-                               tf_ph_G_loss:  train_g_avg,
+                               tf_ph_G_loss:  train_g_avgs[0], #train_g_avg,
+                               tf_ph_G_losses:  train_g_avgs,
                                tf_ph_W_loss:  train_w_avg,
                                tf_ph_sq_diff: train2_avg,
                                tf_gtvar_diff: gtvar_train_avg,
@@ -1325,7 +1371,9 @@ with tf.Session()  as sess:
                                tf_img_test9:  img_gain_test9}) # previous value of *_avg #Fetch argument 0.0 has invalid type <class 'float'>, must be a string or Tensor. (Can not convert a float into a Tensor or Operation.)
                 
                 loss_gw_train_hist[i] = GW_loss_trained
-                loss_g_train_hist[i] =  G_loss_trained
+#                loss_g_train_hist[i] =  G_loss_trained
+                for nn, gl  in enumerate(G_losses_trained):
+                    loss_g_train_hists[nn][i] =  gl
                 loss_w_train_hist[i] =  W_loss_trained
                 loss2_train_hist[i] = out_cost1
                 gtvar_train_hist[i] = gt_variance
@@ -1334,7 +1382,10 @@ with tf.Session()  as sess:
                 break
 
         train_gw_avg =      np.average(loss_gw_train_hist).astype(np.float32)     
-        train_g_avg =       np.average(loss_g_train_hist).astype(np.float32)     
+        train_g_avg =       np.average(loss_g_train_hist).astype(np.float32) 
+        for nn, lgth  in enumerate(loss_g_train_hists):
+            train_g_avgs[nn] =       np.average(lgth).astype(np.float32)
+###############        
         train_w_avg =       np.average(loss_w_train_hist).astype(np.float32)     
         train2_avg =      np.average(loss2_train_hist).astype(np.float32)
         gtvar_train_avg = np.average(gtvar_train_hist).astype(np.float32)
@@ -1353,7 +1404,7 @@ with tf.Session()  as sess:
                          GW_loss,
                          G_loss,
                          W_loss,
-                         out,
+                         outs[0],
                          _disp_slice,
                          _d_gt_slice,
                          _out_diff,
@@ -1366,6 +1417,7 @@ with tf.Session()  as sess:
                          feed_dict={lr:            learning_rate,
                                     tf_ph_GW_loss:  test_gw_avg,
                                     tf_ph_G_loss:   test_g_avg,
+                                    tf_ph_G_losses:  train_g_avgs, # temporary, there is o data fro test
                                     tf_ph_W_loss:   test_w_avg,
                                     tf_ph_sq_diff:  test2_avg,
                                     tf_gtvar_diff:  gtvar_test_avg,
@@ -1412,7 +1464,7 @@ with tf.Session()  as sess:
                         test_summaries_img[ntest], G_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
                             [merged,
                              G_loss,
-                             out,
+                             outs[0],
                              _disp_slice,
                              _d_gt_slice,
                              _out_diff,
@@ -1425,6 +1477,7 @@ with tf.Session()  as sess:
                              feed_dict={lr:            learning_rate,
                                         tf_ph_GW_loss:  test_gw_avg,
                                         tf_ph_G_loss:   test_g_avg,
+                                        tf_ph_G_losses:  train_g_avgs, # temporary, there is o data fro test
                                         tf_ph_W_loss:   test_w_avg,
                                         tf_ph_sq_diff: test2_avg,
                                         tf_gtvar_diff: gtvar_test_avg,

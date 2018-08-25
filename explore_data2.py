@@ -1030,7 +1030,7 @@ if __name__ == "__main__":
   
   ml_list_train=ex_data.getMLList(ml_subdir, ex_data.files_train)
   ml_list_test= ex_data.getMLList(ml_subdir, ex_data.files_test)
-  num_test_scenes = [ex_data.files_test, ex_data.files_train][TEST_SAME_LENGTH_AS_TRAIN]    
+  num_test_scenes = len([ex_data.files_test, ex_data.files_train][TEST_SAME_LENGTH_AS_TRAIN])    
           
 
   if RADIUS == 0 :
