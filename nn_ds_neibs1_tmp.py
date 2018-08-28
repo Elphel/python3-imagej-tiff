@@ -55,7 +55,7 @@ ONLY_TILE =          None # 4 # None # 0 # 4# None # (remove all but center tile
 ZIP_LHVAR =        True # combine _lvar and _hvar as odd/even elements
 
 #DEBUG_PACK_TILES = True
-WLOSS_LAMBDA =       0.001 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
+WLOSS_LAMBDA =       0.1 # 5.0 # 1.0 # fraction of the W_loss (input layers weight non-uniformity) added to G_loss
 SUFFIX=str(NET_ARCH1)+'-'+str(NET_ARCH2)+ (["R","A"][ABSOLUTE_DISPARITY])
 # CLUSTER_RADIUS should match input data
 CLUSTER_RADIUS =     1 # 1 - 3x3, 2 - 5x5 tiles
@@ -476,7 +476,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                 wt = tf.transpose(w,[1,0])
                 wt = wt[:,:-1]
                 tmp1 = []
-                for i in range(layout[index]):
+                for i in range(out_shape):
                     
                     # reset when even
                     if i%2==0: 
@@ -511,7 +511,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                         tmp1.append(ts)
                 
                 imsum1 = tf.concat(tmp1,axis=0)
-                imsum1_1 = tf.reshape(imsum1,[1,layout[index]*(TILE_SIDE+1)//2,2*TILE_LAYERS*(TILE_SIDE+1),3])
+                imsum1_1 = tf.reshape(imsum1,[1,out_shape*(TILE_SIDE+1)//2,2*TILE_LAYERS*(TILE_SIDE+1),3])
 
                 tf.summary.image("sub_w8s",imsum1_1)
 
@@ -547,7 +547,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                     missing_in_block = math.pow(block_side,2) - block_size
                 
                 tmp1 = []
-                for i in range(layout[index]):
+                for i in range(out_shape):
                     
                     # reset when even
                     if i%4==0: 
@@ -600,7 +600,7 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
                         tmp1.append(ts)
             
                 imsum2 = tf.concat(tmp1,axis=0)
-                tf.summary.image("inter_w8s",tf.reshape(imsum2,[1,layout[index]*cluster_side*(block_side+1)//4,4*cluster_side*(block_side+1),3]))
+                tf.summary.image("inter_w8s",tf.reshape(imsum2,[1,out_shape*cluster_side*(block_side+1)//4,4*cluster_side*(block_side+1),3]))
                 
                 
 
@@ -627,7 +627,7 @@ def network_sub(input, layout, reuse, sym8 = False):
                        if not reuse_this:
                            with tf.variable_scope(scp,reuse=True) : # tf.AUTO_REUSE):
                               inp_weights.append(tf.get_variable('weights')) # ,shape=[inp.shape[1],num_outs]))
-                           network_summary_w_b(scp, inp.shape[1], num_outs, layout, i, 'sub')
+                           network_summary_w_b(scp, inp.shape[1], num_sym8, layout, i, 'sub')
                    if num_non_sum > 0:
                        reuse_this = reuse
                        scp = 'g_fc_sub'+str(i)+"r"
@@ -635,7 +635,7 @@ def network_sub(input, layout, reuse, sym8 = False):
                        if not reuse_this:
                            with tf.variable_scope(scp,reuse=True) : # tf.AUTO_REUSE):
                               inp_weights.append(tf.get_variable('weights')) # ,shape=[inp.shape[1],num_outs]))
-                           network_summary_w_b(scp, inp.shape[1], num_outs, layout, i, 'sub') 
+                           network_summary_w_b(scp, inp.shape[1], num_non_sum, layout, i, 'sub') 
                    fc.append(tf.concat(fc_sym, 1, name='sym_input_layer'))
                else:
                    scp = 'g_fc_sub'+str(i)
