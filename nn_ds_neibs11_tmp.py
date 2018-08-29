@@ -1326,20 +1326,28 @@ with tf.Session()  as sess:
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     
+    merged = tf.summary.merge_all()
+    
     # display weights, part 1 begin
     import numpy_visualize_weights as npw
     
-    #l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
-    #l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+    # only for SYM8_SUB
+    if SYM8_SUB:
+        
+        l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
+        l1_sym8    = NN_LAYOUT1[l1] // 8
+        l1_non_sum = NN_LAYOUT1[l1] % 8
     
-    #wimg1_placeholder = tf.placeholder(tf.float32, [1,160,80,3])
-    #wimg1 = tf.summary.image('weights/sub_'+str(l1), wimg1_placeholder)
-    
-    #wimg2_placeholder = tf.placeholder(tf.float32, [1,120,60,3])
-    #wimg2 = tf.summary.image('weights/inter_'+str(l2), wimg2_placeholder)
+        if l1_non_sum==0:
+            wimg1_placeholder = tf.placeholder(tf.float32, [1,40,80,3])
+            wimg1 = tf.summary.image('weights/sub_'+str(l1), wimg1_placeholder)
+
+        l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+        wimg2_placeholder = tf.placeholder(tf.float32, [1,250,100,3])
+        wimg2 = tf.summary.image('weights/inter_'+str(l2), wimg2_placeholder)
+        
     # display weights, part 1 end
     
-    merged = tf.summary.merge_all()
     train_writer =    tf.summary.FileWriter(TRAIN_PATH, sess.graph)
     test_writer  =    tf.summary.FileWriter(TEST_PATH, sess.graph)
     test_writer1  =   tf.summary.FileWriter(TEST_PATH1, sess.graph)
@@ -1552,24 +1560,29 @@ with tf.Session()  as sess:
              
              
         # display weights, part 2 begin
-        #l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
-        #l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
         
-        #with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
-            #w = tf.get_variable('weights',shape=[325,NN_LAYOUT1[l1]])
-            #w = tf.transpose(w,(1,0))            
-            #img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
-            #img1 = img1[np.newaxis,...]
+        if SYM8_SUB:
+        
+            #l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
+            #l1_sym8    = NN_LAYOUT1[l1] // 8
+            #l1_non_sum = NN_LAYOUT1[l1] % 8
             
-        #train_writer.add_summary(wimg1.eval(feed_dict={wimg1_placeholder: img1}), epoch)
-
-        #with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
-            #w = tf.get_variable('weights',shape=[144,NN_LAYOUT1[l2]])
-            #w = tf.transpose(w,(1,0))            
-            #img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(3,3,4,4),tiles_per_line=4,borders=True)
-            #img2 = img2[np.newaxis,...]
-            
-        #train_writer.add_summary(wimg2.eval(feed_dict={wimg2_placeholder: img2}), epoch)
+            if l1_non_sum==0:
+                with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
+                    w = tf.get_variable('weights',shape=[325,l1_sym8])
+                    w = tf.transpose(w,(1,0))            
+                    img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
+                    img1 = img1[np.newaxis,...]
+                    train_writer.add_summary(wimg1.eval(feed_dict={wimg1_placeholder: img1}), epoch)
+        
+            #l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
+            with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
+                w = tf.get_variable('weights',shape=[400,NN_LAYOUT2[l2]])
+                w = tf.transpose(w,(1,0))
+                img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(5,5,4,4),tiles_per_line=4,borders=True)
+                img2 = img2[np.newaxis,...]
+                train_writer.add_summary(wimg2.eval(feed_dict={wimg2_placeholder: img2}), epoch)
+                    
         # display weights, part 2 end
              
         train_writer.add_summary(train_summary, epoch)
