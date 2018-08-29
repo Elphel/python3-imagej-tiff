@@ -1337,13 +1337,29 @@ with tf.Session()  as sess:
         l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
         l1_sym8    = NN_LAYOUT1[l1] // 8
         l1_non_sum = NN_LAYOUT1[l1] % 8
+        
+        TILES_PER_LINE1 = 2
+        TILES_PER_LINE2 = 4
+        ZERO_SPAN1 = 0.0002
+        ZERO_SPAN2 = 0.0002
+        tile_side1 = TILE_SIDE
+        tile_side2 = int(math.sqrt(NN_LAYOUT2[-1]))                
+        cluster_side = CLUSTER_RADIUS*2+1
+        cluster_size = cluster_side*cluster_side 
+        
+        l1_w = (tile_side1+1)*TILE_LAYERS*TILES_PER_LINE1
+        l1_h = (tile_side1+1)*8//TILES_PER_LINE1
     
         if l1_non_sum==0:
-            wimg1_placeholder = tf.placeholder(tf.float32, [1,40,80,3])
+            wimg1_placeholder = tf.placeholder(tf.float32, [1,l1_h,l1_w,3])
             wimg1 = tf.summary.image('weights/sub_'+str(l1), wimg1_placeholder)
 
         l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
-        wimg2_placeholder = tf.placeholder(tf.float32, [1,250,100,3])
+        
+        l2_w = (tile_side2+1)*cluster_side*TILES_PER_LINE2
+        l2_h = (tile_side2+1)*cluster_side*NN_LAYOUT2[l2]//TILES_PER_LINE2
+                
+        wimg2_placeholder = tf.placeholder(tf.float32, [1,l2_h,l2_w,3])
         wimg2 = tf.summary.image('weights/inter_'+str(l2), wimg2_placeholder)
         
     # display weights, part 1 end
@@ -1566,21 +1582,20 @@ with tf.Session()  as sess:
             #l1 = NN_LAYOUT1.index(next(filter(lambda x: x!=0, NN_LAYOUT1)))
             #l1_sym8    = NN_LAYOUT1[l1] // 8
             #l1_non_sum = NN_LAYOUT1[l1] % 8
-            
+                        
             if l1_non_sum==0:
                 with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
                     w = tf.get_variable('weights',shape=[325,l1_sym8])
                     w = tf.transpose(w,(1,0))            
-                    img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(1,4,9,9),tiles_per_line=2,borders=True)
+                    img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=ZERO_SPAN1),(1,TILE_LAYERS,tile_side1,tile_side1),tiles_per_line=TILES_PER_LINE1,borders=True)
                     img1 = img1[np.newaxis,...]
                     train_writer.add_summary(wimg1.eval(feed_dict={wimg1_placeholder: img1}), epoch)
         
             #l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
             with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
-                
-                w = tf.get_variable('weights',shape=[400,NN_LAYOUT2[l2]])
+                w = tf.get_variable('weights',shape=[cluster_size*NN_LAYOUT2[-1],NN_LAYOUT2[l2]])
                 w = tf.transpose(w,(1,0))
-                img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(5,5,4,4),tiles_per_line=4,borders=True)
+                img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=ZERO_SPAN2),(cluster_side,cluster_side,tile_side2,tile_side2),tiles_per_line=TILES_PER_LINE2,borders=True)
                 img2 = img2[np.newaxis,...]
                 train_writer.add_summary(wimg2.eval(feed_dict={wimg2_placeholder: img2}), epoch)
                     
