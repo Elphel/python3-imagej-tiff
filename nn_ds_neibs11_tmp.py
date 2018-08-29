@@ -1577,6 +1577,7 @@ with tf.Session()  as sess:
         
             #l2 = NN_LAYOUT2.index(next(filter(lambda x: x!=0, NN_LAYOUT2)))
             with tf.variable_scope('g_fc_inter'+str(l2),reuse=tf.AUTO_REUSE):
+                
                 w = tf.get_variable('weights',shape=[400,NN_LAYOUT2[l2]])
                 w = tf.transpose(w,(1,0))
                 img2 = npw.tiles(npw.coldmap(w.eval(),zero_span=0.0002),(5,5,4,4),tiles_per_line=4,borders=True)
