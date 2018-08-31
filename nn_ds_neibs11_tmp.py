@@ -777,9 +777,9 @@ def network_summary_w_b(scope, in_shape, out_shape, layout, index, network_scope
     # the scope is known
     with tf.variable_scope(scope,reuse=tf.AUTO_REUSE):
         # histograms
-        print("Specified shape: "+str(in_shape)+","+str(out_shape))
-        print("Index: "+str(index))
-        print("Layout: "+str(layout))
+        #print("Specified shape: "+str(in_shape)+","+str(out_shape))
+        #print("Index: "+str(index))
+        #print("Layout: "+str(layout))
         
         w = tf.get_variable('weights',shape=[in_shape,out_shape])
         b = tf.get_variable('biases',shape=[out_shape])
@@ -1583,9 +1583,11 @@ with tf.Session()  as sess:
             #l1_sym8    = NN_LAYOUT1[l1] // 8
             #l1_non_sum = NN_LAYOUT1[l1] % 8
                         
+            #print("corr2d_Nx325 shape = "+str(corr2d_Nx325.shape))
+                        
             if l1_non_sum==0:
                 with tf.variable_scope('g_fc_sub'+str(l1),reuse=tf.AUTO_REUSE):
-                    w = tf.get_variable('weights',shape=[325,l1_sym8])
+                    w = tf.get_variable('weights',shape=[corr2d_Nx325.shape[-1],l1_sym8])
                     w = tf.transpose(w,(1,0))            
                     img1 = npw.tiles(npw.coldmap(w.eval(),zero_span=ZERO_SPAN1),(1,TILE_LAYERS,tile_side1,tile_side1),tiles_per_line=TILES_PER_LINE1,borders=True)
                     img1 = img1[np.newaxis,...]
