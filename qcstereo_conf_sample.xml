@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<properties>
+    <parameters>
+        <EPOCHS_TO_RUN>        650 </EPOCHS_TO_RUN> <!-- 752# 3000#0 #0 -->
+        <NET_ARCH1>              0 </NET_ARCH1> <!--1-st stage network  -->
+        <NET_ARCH2>              9 </NET_ARCH2> <!-- 2-nd stage network -->
+        <SYM8_SUB>           False </SYM8_SUB>          <!-- enforce inputs from 2d correlation have symmetrical ones (groups of 8) -->
+        <SPREAD_CONVERGENCE> False </SPREAD_CONVERGENCE><!-- Input target disparity to all nodes of the 1-st stage -->
+        <INTER_CONVERGENCE>  False </INTER_CONVERGENCE><!-- Input target disparity to all nodes of the 2-nd stage -->
+        <LR>                  3e-4 </LR>  <!-- learning rate -->
+        <LR100>               1e-4 </LR100> <!-- LR    # 1e-4 -->
+        <LR200>               3e-5 </LR200> <!-- LR100 # 3e-5 -->
+        <LR400>               1e-5 </LR400> <!-- LR200 # 1e-5 -->
+        <LR600>               3e-6 </LR600> <!-- LR400 # 3e-6 -->
+        <USE_CONFIDENCE>     False </USE_CONFIDENCE>
+        <ABSOLUTE_DISPARITY> False </ABSOLUTE_DISPARITY>  <!-- True # False # True # False -->
+        <DEBUG_PLT_LOSS>      True </DEBUG_PLT_LOSS>      <!-- -->
+        <TILE_LAYERS>            4 </TILE_LAYERS>         <!-- -->
+        <TILE_SIDE>              9 </TILE_SIDE>           <!-- 7 -->
+        <EPOCHS_FULL_TEST>       5 </EPOCHS_FULL_TEST>    <!-- 10 # 25# repeat full image test after this number of epochs -->
+        <TWO_TRAINS>          True </TWO_TRAINS>          <!-- use 2 train sets          -->
+        <ONLY_TILE>           None </ONLY_TILE>           <!--  (remove all but center tile data), put None here for normal operation) -->
+        <CLUSTER_RADIUS>         2 </CLUSTER_RADIUS>      <!--  1 # 1 - 3x3, 2 - 5x5 tiles -->
+        <SHUFFLE_FILES>       True </SHUFFLE_FILES>
+        <WLOSS_LAMBDA>         3.0 </WLOSS_LAMBDA>        <!-- fraction of the W_loss (input layers weight non-uniformity) added to G_loss -->
+        <SLOSS_LAMBDA>         0.1 </SLOSS_LAMBDA>        <!-- weight of loss for smooth fg/bg transitions -->
+        <SLOSS_CLIP>           0.2 </SLOSS_CLIP>          <!-- limit punishment for cutting corners (disparity pix) -->
+        <WBORDERS_ZERO>       True </WBORDERS_ZERO>       <!-- Border conditions for first layer weights: False - free, True - tied to 0 -->
+        <MAX_FILES_PER_GROUP>    4 </MAX_FILES_PER_GROUP> <!-- Reduces memory footprint - file shuffle buffer -->
+        <MAX_IMGS_IN_MEM>        1 </MAX_IMGS_IN_MEM>     <!-- Number of simultaneously loaded images -->
+        <FILE_UPDATE_EPOCHS>     2 </FILE_UPDATE_EPOCHS>  <!-- Update train files each this many epochs. 0 - do not update. Adjust to match speed of HDD/SDD with GPU)-->
+        <PARTIALS_WEIGHTS>  [2.0,0.5,0.2] </PARTIALS_WEIGHTS><!-- weight of full 5x5, center 3x3 and center 1x1. len(PARTIALS_WEIGHTS) == CLUSTER_RADIUS + 1. Set to None -->
+        <HOR_FLIP>            True </HOR_FLIP><!-- randomly flip training data horizontally -->
+        <SAVE_TIFFS>          True </SAVE_TIFFS><!-- save Tiff files after each image evaluation -->
+        <BATCH_WEIGHTS> [0.9, 1.0, 0.9, 1.0]</BATCH_WEIGHTS> <!-- lvar, hvar, lvar1, hvar1 (increase importance of non-flat clusters -->
+        <DISP_DIFF_CAP>       0.3  </DISP_DIFF_CAP><!-- cap disparity difference (do not increase loss above)-->
+        <DISP_DIFF_SLOPE>     0.03 </DISP_DIFF_SLOPE><!-- allow squared error to grow above DISP_DIFF_CAP -->
+    </parameters>
+    <directories>
+        <train_lvar>
+            "tf_data_5x5_main_1"
+        </train_lvar>
+        <train_hvar>
+            "tf_data_5x5_main_1"
+        </train_hvar>
+        <train_lvar1>
+            "tf_data_5x5_main_6"
+        </train_lvar1>
+        <train_hvar1>
+            "tf_data_5x5_main_6"
+        </train_hvar1>
+        <test_lvar>
+            "tf_data_5x5_main_1"
+        </test_lvar>
+        <test_hvar>
+            "tf_data_5x5_main_5"
+        </test_hvar>
+        <images>
+            "tf_data_5x5_main_6/img"
+        </images>
+        <result>
+            "tf_data_5x5_main_6/result"
+        </result>
+    </directories>
+    <files>
+        <train_lvar>
+            ["train000_R2_LE_1.5.tfrecords",
+            "train001_R2_LE_1.5.tfrecords",
+            "train002_R2_LE_1.5.tfrecords",
+            "train003_R2_LE_1.5.tfrecords",
+            "train004_R2_LE_1.5.tfrecords",
+            "train005_R2_LE_1.5.tfrecords",
+            "train006_R2_LE_1.5.tfrecords",
+            "train007_R2_LE_1.5.tfrecords",
+            "train008_R2_LE_1.5.tfrecords",
+            "train009_R2_LE_1.5.tfrecords",
+            "train010_R2_LE_1.5.tfrecords",
+            "train011_R2_LE_1.5.tfrecords",
+            "train012_R2_LE_1.5.tfrecords",
+            "train013_R2_LE_1.5.tfrecords",
+            "train014_R2_LE_1.5.tfrecords",
+            "train015_R2_LE_1.5.tfrecords",
+            "train016_R2_LE_1.5.tfrecords",
+            "train017_R2_LE_1.5.tfrecords",
+            "train018_R2_LE_1.5.tfrecords",
+            "train019_R2_LE_1.5.tfrecords",
+            "train020_R2_LE_1.5.tfrecords",
+            "train021_R2_LE_1.5.tfrecords",
+            "train022_R2_LE_1.5.tfrecords",
+            "train023_R2_LE_1.5.tfrecords",
+            "train024_R2_LE_1.5.tfrecords",
+            "train025_R2_LE_1.5.tfrecords",
+            "train026_R2_LE_1.5.tfrecords",
+            "train027_R2_LE_1.5.tfrecords",
+            "train028_R2_LE_1.5.tfrecords",
+            "train029_R2_LE_1.5.tfrecords",
+            "train030_R2_LE_1.5.tfrecords",
+            "train031_R2_LE_1.5.tfrecords"]
+        </train_lvar>
+        <train_hvar>
+            ["train000_R2_GT_1.5.tfrecords",
+            "train001_R2_GT_1.5.tfrecords",
+            "train002_R2_GT_1.5.tfrecords",
+            "train003_R2_GT_1.5.tfrecords",
+            "train004_R2_GT_1.5.tfrecords",
+            "train005_R2_GT_1.5.tfrecords",
+            "train006_R2_GT_1.5.tfrecords",
+            "train007_R2_GT_1.5.tfrecords",
+            "train008_R2_GT_1.5.tfrecords",
+            "train009_R2_GT_1.5.tfrecords",
+            "train010_R2_GT_1.5.tfrecords",
+            "train011_R2_GT_1.5.tfrecords",
+            "train012_R2_GT_1.5.tfrecords",
+            "train013_R2_GT_1.5.tfrecords",
+            "train014_R2_GT_1.5.tfrecords",
+            "train015_R2_GT_1.5.tfrecords",
+            "train016_R2_GT_1.5.tfrecords",
+            "train017_R2_GT_1.5.tfrecords",
+            "train018_R2_GT_1.5.tfrecords",
+            "train019_R2_GT_1.5.tfrecords",
+            "train020_R2_GT_1.5.tfrecords",
+            "train021_R2_GT_1.5.tfrecords",
+            "train022_R2_GT_1.5.tfrecords",
+            "train023_R2_GT_1.5.tfrecords",
+            "train024_R2_GT_1.5.tfrecords",
+            "train025_R2_GT_1.5.tfrecords",
+            "train026_R2_GT_1.5.tfrecords",
+            "train027_R2_GT_1.5.tfrecords",
+            "train028_R2_GT_1.5.tfrecords",
+            "train029_R2_GT_1.5.tfrecords",
+            "train030_R2_GT_1.5.tfrecords",
+            "train031_R2_GT_1.5.tfrecords"]
+        </train_hvar>
+
+        <train_lvar1>
+            ["train000_R2_LE_0.4.tfrecords",
+            "train001_R2_LE_0.4.tfrecords",
+            "train002_R2_LE_0.4.tfrecords",
+            "train003_R2_LE_0.4.tfrecords",
+            "train004_R2_LE_0.4.tfrecords",
+            "train005_R2_LE_0.4.tfrecords",
+            "train006_R2_LE_0.4.tfrecords",
+            "train007_R2_LE_0.4.tfrecords",
+            "train008_R2_LE_0.4.tfrecords",
+            "train009_R2_LE_0.4.tfrecords",
+            "train010_R2_LE_0.4.tfrecords",
+            "train011_R2_LE_0.4.tfrecords",
+            "train012_R2_LE_0.4.tfrecords",
+            "train013_R2_LE_0.4.tfrecords",
+            "train014_R2_LE_0.4.tfrecords",
+            "train015_R2_LE_0.4.tfrecords",
+            "train016_R2_LE_0.4.tfrecords",
+            "train017_R2_LE_0.4.tfrecords",
+            "train018_R2_LE_0.4.tfrecords",
+            "train019_R2_LE_0.4.tfrecords",
+            "train020_R2_LE_0.4.tfrecords",
+            "train021_R2_LE_0.4.tfrecords",
+            "train022_R2_LE_0.4.tfrecords",
+            "train023_R2_LE_0.4.tfrecords",
+            "train024_R2_LE_0.4.tfrecords",
+            "train025_R2_LE_0.4.tfrecords",
+            "train026_R2_LE_0.4.tfrecords",
+            "train027_R2_LE_0.4.tfrecords",
+            "train028_R2_LE_0.4.tfrecords",
+            "train029_R2_LE_0.4.tfrecords",
+            "train030_R2_LE_0.4.tfrecords",
+            "train031_R2_LE_0.4.tfrecords"]
+        </train_lvar1>
+        <train_hvar1>
+            ["train000_R2_GT_0.4.tfrecords",
+            "train001_R2_GT_0.4.tfrecords",
+            "train002_R2_GT_0.4.tfrecords",
+            "train003_R2_GT_0.4.tfrecords",
+            "train004_R2_GT_0.4.tfrecords",
+            "train005_R2_GT_0.4.tfrecords",
+            "train006_R2_GT_0.4.tfrecords",
+            "train007_R2_GT_0.4.tfrecords",
+            "train008_R2_GT_0.4.tfrecords",
+            "train009_R2_GT_0.4.tfrecords",
+            "train010_R2_GT_0.4.tfrecords",
+            "train011_R2_GT_0.4.tfrecords",
+            "train012_R2_GT_0.4.tfrecords",
+            "train013_R2_GT_0.4.tfrecords",
+            "train014_R2_GT_0.4.tfrecords",
+            "train015_R2_GT_0.4.tfrecords",
+            "train016_R2_GT_0.4.tfrecords",
+            "train017_R2_GT_0.4.tfrecords",
+            "train018_R2_GT_0.4.tfrecords",
+            "train019_R2_GT_0.4.tfrecords",
+            "train020_R2_GT_0.4.tfrecords",
+            "train021_R2_GT_0.4.tfrecords",
+            "train022_R2_GT_0.4.tfrecords",
+            "train023_R2_GT_0.4.tfrecords",
+            "train024_R2_GT_0.4.tfrecords",
+            "train025_R2_GT_0.4.tfrecords",
+            "train026_R2_GT_0.4.tfrecords",
+            "train027_R2_GT_0.4.tfrecords",
+            "train028_R2_GT_0.4.tfrecords",
+            "train029_R2_GT_0.4.tfrecords",
+            "train030_R2_GT_0.4.tfrecords",
+            "train031_R2_GT_0.4.tfrecords"]
+        </train_hvar1>
+
+
+        <test_lvar>
+            ["train004_R2_GT_1.5.tfrecords"]
+        </test_lvar>
+        
+        <test_hvar>
+            ["testTEST_R2_GT_1.5.tfrecords"]
+        </test_hvar>
+        
+        <images>
+            ["1527256858_150165-v01", <!-- State Street -->
+             "1527257933_150165-v04", <!--  overlook -->
+             "1527256816_150165-v02", <!--  State Street -->
+             "1527182802_096892-v02", <!--  plane near plane -->
+             "1527182805_096892-v02", <!--  plane midrange used up to -49 plane -->
+             "1527182810_096892-v02"]  <!--  plane far -->
+        </images>
+    </files>
+</properties>
+ 
