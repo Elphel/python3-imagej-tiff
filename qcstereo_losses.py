@@ -10,6 +10,7 @@ import tensorflow as tf
 def smoothLoss(out_batch,                   # [batch_size,(1..2)] tf_result
                target_disparity_batch,      # [batch_size]        tf placeholder
                gt_ds_batch_clust,           # [batch_size,25,2]      tf placeholder
+               clip,                        # limit punishment for cutting corners (disparity pix)
                absolute_disparity =     False, #when false there should be no activation on disparity output !
                cluster_radius =         2):
     with tf.name_scope("SmoothLoss"):
@@ -25,6 +26,7 @@ def smoothLoss(out_batch,                   # [batch_size,(1..2)] tf_result
             for dx in [-1,0,1]:
                 if (dy != 0) or (dx != 0):
                     i8.append(center_tile_index+(dy*cluster_side)+dx)
+        tf_clip = tf.constant(clip, dtype=tf.float32,                                 name = "clip")
         tf_gt_ds_all =     tf.reshape(gt_ds_batch_clust,[-1,cluster_size,gt_ds_batch_clust.shape[1]//cluster_size], name = "gt_ds_all")            
         tf_neibs8 =        tf.gather(tf_gt_ds_all, indices = i8, axis = 1,       name = "neibs8")
         tf_gt_disparity8 = tf.reshape(tf_neibs8[:,:,0], [-1,8],                       name = "gt8_disparity") # (?,8)
@@ -42,7 +44,7 @@ def smoothLoss(out_batch,                   # [batch_size,(1..2)] tf_result
         tf_gt_strength =   tf.reshape(tf_gt_ds_all[:,center_tile_index,1], [-1], name = "gt_strength") # (?,)
         tf_d0 =            tf.abs(tf_gt_disparity - tf_avg_disparity,                 name = "tf_d0")
         tf_d =             tf.maximum(tf_d0, 0.001,                                   name = "tf_d")
-        tf_d2 =            tf.multiply(tf_d, tf_d,                                    name = "tf_d2")
+##        tf_d2 =            tf.multiply(tf_d, tf_d,                                    name = "tf_d2")
         
         tf_out =           tf.reshape(out_batch[:,0],[-1],                            name = "tf_out")
         if absolute_disparity:
@@ -52,12 +54,12 @@ def smoothLoss(out_batch,                   # [batch_size,(1..2)] tf_result
             
         tf_offs =          tf.subtract(tf_out_disparity, tf_avg_disparity,            name = "offs")
         tf_offs2 =         tf.multiply(tf_offs, tf_offs,                              name = "offs2")
-#        tf_parab =         tf.divide(tf_offs2, tf_d,                                  name = "parab")
-#        tf_cost_nlim =     tf.subtract(tf_d2, tf_offs2,                               name = "cost_nlim")
+        
+        tf_offs2_d =       tf.divide(tf_offs2, tf_d,                                  name = "offs2_d")
+        tf_cost0 =         tf.maximum(tf_d - tf_offs2_d, 0.0,                         name = "cost0")
+        tf_cost_nw =       tf.minimum(tf_cost0,  tf_clip,                             name = "cost_nw")
 
-    
-#        tf_cost_nw =       tf.maximum(tf_d - tf_parab, 0.0,                           name = "cost_nw")
-        tf_cost_nw =       tf.maximum(tf_d2 - tf_offs2, 0.0,                          name = "cost_nw")
+##        tf_cost_nw =       tf.maximum(tf_d2 - tf_offs2, 0.0,                          name = "cost_nw")
         tf_cost_w =        tf.multiply(tf_cost_nw, tf_gt_strength,                    name = "cost_w")
         tf_sum_wc =        tf.reduce_sum(tf_gt_strength,                              name = "sum_wc")
         tf_sum_costw =     tf.reduce_sum(tf_cost_w,                                   name = "sum_costw")
