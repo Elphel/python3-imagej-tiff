@@ -199,8 +199,6 @@ def getMoreFiles(fpaths,rslt):
                 print_time("Done")
         rslt.append(dataset)
 
-   
-
 #from http://warmspringwinds.github.io/tensorflow/tf-slim/2016/12/21/tfrecords-guide/
 def read_and_decode(filename_queue):
     reader = tf.TFRecordReader()
@@ -247,7 +245,7 @@ def add_neibs(npa_ext,radius):
         for dx in range (side):
             npa_neib[:,:,dy, dx,:]= npa_ext[dy:dy+height, dx:dx+width]
     return npa_neib.reshape(height, width, -1)    
-    
+  
 def extend_img_to_clusters(datasets_img,radius):
     side = 2 * radius + 1
     size = side * side
@@ -261,8 +259,6 @@ def extend_img_to_clusters(datasets_img,radius):
         rec['target_disparity'] = add_neibs(add_margins(rec['target_disparity'].reshape((height,width,-1)), radius, np.nan), radius).reshape((num_tiles,-1)) 
         rec['gt_ds'] =            add_neibs(add_margins(rec['gt_ds'].reshape((height,width,-1)), radius, np.nan), radius).reshape((num_tiles,-1))
         pass
-
-
 
 def reformat_to_clusters(datasets_data):
     cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
@@ -301,7 +297,6 @@ TILE_SIZE =         TILE_SIDE* TILE_SIDE # == 81
         rec['corr2d'] =           corr2d.reshape((corr2d.shape[0],-1)) 
         rec['target_disparity'] = target_disparity.reshape((target_disparity.shape[0],-1)) 
         rec['gt_ds'] =            gt_ds.reshape((gt_ds.shape[0],-1))
-        
 
 def replace_nan(datasets_data):
     cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
@@ -353,7 +348,6 @@ def shuffle_chunks_in_place(datasets_data, tiles_groups_per_chunk):
         ds['target_disparity'] = ds['target_disparity'].reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
         ds['gt_ds'] =            ds['gt_ds'].           reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
 
-
 def _setFileSlot(train_next,files):
     train_next['files'] = files
     train_next['slots'] = min(train_next['files'], MAX_FILES_PER_GROUP)
@@ -375,8 +369,6 @@ def replaceDataset(datasets_data, new_dataset, nset, period, findx):
     datasets_data[findx]['corr2d']          [nset::period] =  new_dataset['corr2d'] 
     datasets_data[findx]['target_disparity'][nset::period] =  new_dataset['target_disparity'] 
     datasets_data[findx]['gt_ds']           [nset::period] =  new_dataset['gt_ds'] 
-       
-
     
 
 def zip_lvar_hvar(datasets_all_data, del_src = True):
@@ -415,7 +407,6 @@ def reduce_tile_size(datasets_data, num_tile_layers, reduced_tile_side):
             rec['corr2d'] =  (rec['corr2d'].reshape((-1, num_tile_layers,  tss, tss))
                                  [..., offs:offs+reduced_tile_side, offs:offs+reduced_tile_side].
                                  reshape(-1,num_tile_layers*reduced_tile_side*reduced_tile_side))
-            
             
 def result_npy_to_tiff(npy_path, absolute, fix_nan):
     
