@@ -55,7 +55,22 @@ Temporarily for backward compatibility
 """
 if not "SLOSS_CLIP" in parameters:
     parameters['SLOSS_CLIP'] = 0.5
-    print ("Old config, setting SLOSS_CLIP=",SLOSS_CLIP)
+    print ("Old config, setting SLOSS_CLIP=", parameters['SLOSS_CLIP'])
+    
+"""
+Defined in config file
+"""
+TILE_SIDE, TILE_LAYERS, TWO_TRAINS, NET_ARCH1, NET_ARCH2 = [None]*5
+ABSOLUTE_DISPARITY,SYM8_SUB, WLOSS_LAMBDA,  SLOSS_LAMBDA, SLOSS_CLIP  = [None]*5
+SPREAD_CONVERGENCE, INTER_CONVERGENCE, HOR_FLIP, DISP_DIFF_CAP, DISP_DIFF_SLOPE  = [None]*5
+CLUSTER_RADIUS = None
+PARTIALS_WEIGHTS, MAX_IMGS_IN_MEM, MAX_FILES_PER_GROUP,  BATCH_WEIGHTS, ONLY_TILE = [None] * 5  
+USE_CONFIDENCE, WBORDERS_ZERO, EPOCHS_TO_RUN, FILE_UPDATE_EPOCHS = [None] * 4
+LR600,LR400,LR200,LR100,LR = [None]*5
+SHUFFLE_FILES, EPOCHS_FULL_TEST, SAVE_TIFFS = [None] * 3
+
+
+
 globals().update(parameters)
 
 
@@ -178,7 +193,7 @@ def debug_gt_variance(
         gt_ds_batch # [?:9:2]
         ):
     with tf.name_scope("Debug_GT_Variance"):
-        tf_num_tiles =  tf.shape(gt_ds_batch)[0]
+#        tf_num_tiles =  tf.shape(gt_ds_batch)[0]
         d_gt_this =     tf.reshape(gt_ds_batch[:,2 * indx],[-1],                     name = "d_this")
         d_gt_center =   tf.reshape(gt_ds_batch[:,2 * center_indx],[-1],              name = "d_center")
         d_gt_diff =     tf.subtract(d_gt_this, d_gt_center,                          name = "d_diff")
@@ -401,7 +416,8 @@ with tf.Session()  as sess:
     img_gain_test9 =  1.0
     
     num_train_variants = len(datasets_train)
-    thr=None;
+    thr=None
+    thr_result = None
     trains_to_update = [train_next[n_train]['files'] > train_next[n_train]['slots'] for n_train in range(len(train_next))]
     for epoch in range (EPOCHS_TO_RUN):
         """

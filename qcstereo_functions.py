@@ -10,7 +10,8 @@ import tensorflow as tf
 import xml.etree.ElementTree as ET
 import time
 import imagej_tiffwriter
-
+TIME_LAST = 0
+TIME_START = 0
 
 class bcolors:
     HEADER = '\033[95m'
@@ -32,8 +33,6 @@ def print_time(txt="",end="\n"):
 def parseXmlConfig(conf_file, root_dir):
     tree = ET.parse(conf_file)
     root = tree.getroot()
-    directories = root.find('directories')
-    files =       root.find('files')
     parameters = {}
     for p in root.find('parameters'):
         parameters[p.tag]=eval(p.text.strip())
@@ -141,7 +140,7 @@ def getMoreFiles(fpaths,rslt, cluster_radius, hor_flip, tile_layers, tile_side):
         rslt.append(dataset)
 
 #from http://warmspringwinds.github.io/tensorflow/tf-slim/2016/12/21/tfrecords-guide/
-def read_and_decode(filename_queue):
+def read_and_decode(filename_queue, featrures_per_tile):
     reader = tf.TFRecordReader()
     _, serialized_example = reader.read(filename_queue)
 
@@ -149,7 +148,7 @@ def read_and_decode(filename_queue):
       serialized_example,
       # Defaults are not specified since both keys are required.
       features={
-        'corr2d':           tf.FixedLenFeature([FEATURES_PER_TILE],tf.float32), #string),
+        'corr2d':           tf.FixedLenFeature([featrures_per_tile],tf.float32), #string),
         'target_disparity': tf.FixedLenFeature([1],   tf.float32), #.string),
         'gt_ds':            tf.FixedLenFeature([2],  tf.float32)  #.string)
         })
@@ -488,19 +487,28 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
     """
     tiff_path = npy_path.replace('.npy','.tiff')
     data = np.load(npy_path) #(324,242,4) [nn_disp, target_disp,gt_disp, gt_conf]
-         
+    nn_out =            0
+    target_disparity =  1     
+    gt_disparity =      2     
+    gt_strength =       3     
     if not absolute:
         if fix_nan:
-            data[...,0] +=  np.nan_to_num(data[...,1], copy=True)
+            data[...,nn_out] +=  np.nan_to_num(data[...,1], copy=True)
         else:
-            data[...,0] +=  data[...,1]
+            data[...,nn_out] +=  data[...,1]
     if insert_deltas:
-        data = np.concatenate([data[...,0:4],data[...,0:2],data[...,4:]], axis = 2)
-        data[...,4] -= data[...,2] 
-        data[...,5] -= data[...,2]
-        np.nan_to_num(data[...,3], copy=False)
-        data[...,4] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,4]])
-        data[...,5] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,5]])
+        np.nan_to_num(data[...,gt_strength], copy=False)
+        data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2)
+        data[...,6] -= data[...,gt_disparity] 
+        data[...,7] -= data[...,gt_disparity]
+        for l in [4,5,6,7]:
+            data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
+        # All other layers - mast too
+        for l in range(8,data.shape[2]):
+            data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
+            
+#        data[...,4] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,4]])
+#       data[...,5] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,5]])
             
     data = data.transpose(2,0,1)
     print("Saving results to TIFF: "+tiff_path)
