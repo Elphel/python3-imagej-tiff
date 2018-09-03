@@ -1340,8 +1340,8 @@ with tf.Session()  as sess:
         
         TILES_PER_LINE1 = 2
         TILES_PER_LINE2 = 4
-        ZERO_SPAN1 = 0.0002
-        ZERO_SPAN2 = 0.0002
+        ZERO_SPAN1 = 0.00002
+        ZERO_SPAN2 = 0.00002
         tile_side1 = TILE_SIDE
         tile_side2 = int(math.sqrt(NN_LAYOUT2[-1]))                
         cluster_side = CLUSTER_RADIUS*2+1
