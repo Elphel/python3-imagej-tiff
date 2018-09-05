@@ -1,25 +1,25 @@
 #!/usr/bin/env python3
-from numpy import float64
-from tensorflow.contrib.losses.python.metric_learning.metric_loss_ops import npairs_loss
-from debian.deb822 import PdiffIndex
+##from numpy import float64
+##from tensorflow.contrib.losses.python.metric_learning.metric_loss_ops import npairs_loss
+##from debian.deb822 import PdiffIndex
 
 __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
 
-from PIL import Image
+##from PIL import Image
 
 import os
 import sys
-import glob
+##import glob
 
 import numpy as np
-import itertools
+##import itertools
 
 import time
 
-import matplotlib.pyplot as plt
+##import matplotlib.pyplot as plt
 
 import shutil
 from threading import Thread
@@ -49,7 +49,7 @@ except IndexError:
     root_dir =  os.path.dirname(conf_file)
     
 print ("Configuration file: " + conf_file)
-parameters, dirs, files = qsf.parseXmlConfig(conf_file, root_dir)
+parameters, dirs, files, _ = qsf.parseXmlConfig(conf_file, root_dir)
 """
 Temporarily for backward compatibility
 """
@@ -221,7 +221,7 @@ if SPREAD_CONVERGENCE:
                                             
 else:
     outs, inp_weights =  qcstereo_network.networks_siam(
-                                            input=              corr2d_Nx325,
+                                            input_tensor=       corr2d_Nx325,
                                             input_global =      None,
                                             layout1 =           NN_LAYOUT1, 
                                             layout2 =           NN_LAYOUT2,
@@ -247,7 +247,7 @@ G_losses[0], _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdif
               absolute_disparity =     ABSOLUTE_DISPARITY,
               use_confidence =         USE_CONFIDENCE, # True, 
               lambda_conf_avg =        0.01,
-              lambda_conf_pwr =        0.1,
+##              lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
               gt_conf_pwr =            2.0,
@@ -268,7 +268,7 @@ for n in range (1,len(partials)):
               absolute_disparity =     ABSOLUTE_DISPARITY,
               use_confidence =         USE_CONFIDENCE, # True, 
               lambda_conf_avg =        0.01,
-              lambda_conf_pwr =        0.1,
+#              lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
               gt_conf_pwr =            2.0,
@@ -702,7 +702,7 @@ with tf.Session()  as sess:
                 if ntest > 0:
                     image_data[ntest] = None
      
-     # Close writers
+    # Close writers
     train_writer.close()
     test_writer.close()
     test_writer1.close()
