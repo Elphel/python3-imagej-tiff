@@ -2,7 +2,7 @@
 
 '''
 /**
- * @file imagej_tiff_saver.py
+ * @file imagej_tiffwriter.py
  * @brief save tiffs for imagej (1.52d+) - with stacks and hyperstacks
  * @par <b>License</b>:
  *  This program is free software: you can redistribute it and/or modify
@@ -32,8 +32,9 @@ Usage example:
   Have a few images in the form of numpy arrays np.float32:
   - (h,w)
   - (n,h,w)
-  
-  labels can be provided as a list
+
+  Labels can be provided as a list: ['label1','label2', etc.]
+  No list length check against number of images
 
   imagej_tiffwriter.save(path,images,labels)
 
