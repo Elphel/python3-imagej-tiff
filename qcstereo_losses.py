@@ -4,7 +4,7 @@ __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
 #from numpy import float64
-import numpy as np
+#import numpy as np
 import tensorflow as tf
 
 def smoothLoss(out_batch,                   # [batch_size,(1..2)] tf_result
@@ -76,7 +76,7 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
               absolute_disparity =     False, #when false there should be no activation on disparity output ! 
               use_confidence =         False, 
               lambda_conf_avg =        0.01,
-              lambda_conf_pwr =        0.1,
+##              lambda_conf_pwr =        0.1,
               conf_pwr =               2.0,
               gt_conf_offset =         0.08,
               gt_conf_pwr =            1.0,
@@ -90,14 +90,14 @@ def batchLoss(out_batch,                   # [batch_size,(1..2)] tf_result
         Here confidence should be after relU. Disparity - may be also if absolute, but no activation if output is residual disparity
         """
         tf_lambda_conf_avg = tf.constant(lambda_conf_avg, dtype=tf.float32, name="tf_lambda_conf_avg")
-        tf_lambda_conf_pwr = tf.constant(lambda_conf_pwr, dtype=tf.float32, name="tf_lambda_conf_pwr")
-        tf_conf_pwr =        tf.constant(conf_pwr,        dtype=tf.float32, name="tf_conf_pwr")
+##        tf_lambda_conf_pwr = tf.constant(lambda_conf_pwr, dtype=tf.float32, name="tf_lambda_conf_pwr")
+##        tf_conf_pwr =        tf.constant(conf_pwr,        dtype=tf.float32, name="tf_conf_pwr")
         tf_gt_conf_offset =  tf.constant(gt_conf_offset,  dtype=tf.float32, name="tf_gt_conf_offset")
         tf_gt_conf_pwr =     tf.constant(gt_conf_pwr,     dtype=tf.float32, name="tf_gt_conf_pwr")
         tf_num_tiles =       tf.shape(gt_ds_batch)[0]
         tf_0f =              tf.constant(0.0,             dtype=tf.float32, name="tf_0f")
         tf_1f =              tf.constant(1.0,             dtype=tf.float32, name="tf_1f")
-        tf_maxw =            tf.constant(1.0,             dtype=tf.float32, name="tf_maxw")
+##        tf_maxw =            tf.constant(1.0,             dtype=tf.float32, name="tf_maxw")
         tf_disp_diff_cap2=   tf.constant(disp_diff_cap*disp_diff_cap,  dtype=tf.float32, name="disp_diff_cap2")
         tf_disp_diff_slope=  tf.constant(disp_diff_slope, dtype=tf.float32, name="disp_diff_slope")
         
@@ -197,7 +197,7 @@ def weightsLoss(inp_weights,
                 tile_side,
                 wborders_zero):
                 
-                       # [batch_size,(1..2)] tf_result
+                # [batch_size,(1..2)] tf_result
 #                weights_lambdas):  # single lambda or same length as inp_weights.shape[1]
     """
     Enforcing 'smooth' weights for the input 2d correlation tiles

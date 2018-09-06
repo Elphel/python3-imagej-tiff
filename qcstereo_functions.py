@@ -30,13 +30,14 @@ def print_time(txt="",end="\n"):
         txt +=" "
     print(("%s"+bcolors.BOLDWHITE+"at %.4fs (+%.4fs)"+bcolors.ENDC)%(txt,t-TIME_START,t-TIME_LAST), end = end, flush=True)
     TIME_LAST = t
+    
 def parseXmlConfig(conf_file, root_dir):
     tree = ET.parse(conf_file)
     root = tree.getroot()
     parameters = {}
     for p in root.find('parameters'):
         parameters[p.tag]=eval(p.text.strip())
-    globals    
+#    globals    
     dirs={}
     for p in root.find('directories'):
         dirs[p.tag]=eval(p.text.strip())
@@ -46,7 +47,11 @@ def parseXmlConfig(conf_file, root_dir):
     for p in root.find('files'):
         files[p.tag]=eval(p.text.strip())
 #    globals().update(parameters)
-    return parameters, dirs, files
+    dbg_parameters = {}
+    for p in root.find('dbg_parameters'):
+        dbg_parameters[p.tag]=eval(p.text.strip())
+
+    return parameters, dirs, files, dbg_parameters
 
 
 
@@ -84,7 +89,8 @@ def readTFRewcordsEpoch(train_filename):
     npy_dir_name = "npy"
     dirname = os.path.dirname(train_filename) 
     npy_dir = os.path.join(dirname, npy_dir_name)
-    filebasename, file_extension = os.path.splitext(train_filename)
+#    filebasename, file_extension = os.path.splitext(train_filename)
+    filebasename, _ = os.path.splitext(train_filename)
     filebasename = os.path.basename(filebasename)
     file_corr2d =           os.path.join(npy_dir,filebasename + '_corr2d.npy')
     file_target_disparity = os.path.join(npy_dir,filebasename + '_target_disparity.npy')
@@ -179,7 +185,7 @@ def add_neibs(npa_ext,radius):
     height = npa_ext.shape[0]-2*radius
     width =  npa_ext.shape[1]-2*radius
     side = 2 * radius + 1
-    size = side * side
+#    size = side * side
     npa_neib = np.empty((height,  width, side, side, npa_ext.shape[2]), dtype = npa_ext.dtype)
     for dy in range (side):
         for dx in range (side):
@@ -187,8 +193,8 @@ def add_neibs(npa_ext,radius):
     return npa_neib.reshape(height, width, -1)    
   
 def extend_img_to_clusters(datasets_img,radius, width): #  = 324):
-    side = 2 * radius + 1
-    size = side * side
+#    side = 2 * radius + 1
+#    size = side * side
     if len(datasets_img) ==0:
         return
     num_tiles = datasets_img[0]['corr2d'].shape[0]
@@ -210,7 +216,7 @@ def reformat_to_clusters(datasets_data, cluster_radius):
 
 def flip_horizontal(datasets_data, cluster_radius, tile_layers, tile_side):
     cluster_side = 2 * cluster_radius + 1
-    cluster_size = cluster_side * cluster_side
+#    cluster_size = cluster_side * cluster_side
     """
 TILE_LAYERS =        4
 TILE_SIDE =          9 # 7
@@ -238,8 +244,8 @@ TILE_SIZE =         TILE_SIDE* TILE_SIDE # == 81
         rec['target_disparity'] = target_disparity.reshape((target_disparity.shape[0],-1)) 
         rec['gt_ds'] =            gt_ds.reshape((gt_ds.shape[0],-1))
 
-def replace_nan(datasets_data, cluster_radius):
-    cluster_size = (2 * cluster_radius + 1) * (2 * cluster_radius + 1)
+def replace_nan(datasets_data): # , cluster_radius):
+#    cluster_size = (2 * cluster_radius + 1) * (2 * cluster_radius + 1)
 # Reformat input data
     for rec in datasets_data:
         if not rec is None:
@@ -259,7 +265,7 @@ def permute_to_swaps(perm):
         
 def shuffle_in_place(datasets_data, indx, period):
     swaps = permute_to_swaps(np.random.permutation(len(datasets_data)))
-    num_entries = datasets_data[0]['corr2d'].shape[0] // period
+#    num_entries = datasets_data[0]['corr2d'].shape[0] // period
     for swp in swaps:
         ds0 = datasets_data[swp[0]]
         ds1 = datasets_data[swp[1]]
@@ -279,9 +285,10 @@ def shuffle_chunks_in_place(datasets_data, tiles_groups_per_chunk):
     """
     Improve shuffling by preserving indices inside batches (0 <->0, ... 39 <->39 for 40 tile group batches)
     """
-    num_files = len(datasets_data)
+#    num_files = len(datasets_data)
     #chunks_per_file = datasets_data[0]['target_disparity']
-    for nf, ds in enumerate(datasets_data):
+#    for nf, ds in enumerate(datasets_data):
+    for ds in datasets_data:
         groups_per_file = ds['corr2d'].shape[0]
         chunks_per_file = groups_per_file//tiles_groups_per_chunk
         permut = np.random.permutation(chunks_per_file)
@@ -327,7 +334,8 @@ def zip_lvar_hvar(datasets_all_data, del_src = True):
                    'target_disparity': np.empty((recs[0]['target_disparity'].shape[0]*num_sets_to_combine,recs[0]['target_disparity'].shape[1]),dtype=np.float32),
                    'gt_ds':            np.empty((recs[0]['gt_ds'].shape[0]*num_sets_to_combine,           recs[0]['gt_ds'].shape[1]),dtype=np.float32)}
             
-            for nset, reci in enumerate(recs):
+#            for nset, reci in enumerate(recs):
+            for nset, _ in enumerate(recs):
                 rec['corr2d']          [nset::num_sets_to_combine] =  recs[nset]['corr2d'] 
                 rec['target_disparity'][nset::num_sets_to_combine] =  recs[nset]['target_disparity'] 
                 rec['gt_ds']           [nset::num_sets_to_combine] =  recs[nset]['gt_ds'] 
@@ -356,10 +364,10 @@ def initTrainTestData(
         max_files_per_group, # shuffling buffer for files
         two_trains,
         train_next):
-    datasets_train_lvar =  []
-    datasets_train_hvar =  []
-    datasets_train_lvar1 = []
-    datasets_train_hvar1 = []
+#    datasets_train_lvar =  []
+#    datasets_train_hvar =  []
+#    datasets_train_lvar1 = []
+#    datasets_train_hvar1 = []
     datasets_train_all = [[],[],[],[]]
     for n_train, f_train in enumerate(files['train']):
         if len(f_train) and ((n_train<2) or two_trains):
@@ -445,7 +453,8 @@ def readImageData(image_data,
              cluster_radius,
              width)
         if replace_nans:
-            replace_nan([image_data[indx]], cluster_radius)
+#            replace_nan([image_data[indx]], cluster_radius)
+            replace_nan([image_data[indx]])
             
     return image_data[indx]
                
@@ -477,7 +486,7 @@ def evaluateAllResults(result_files, absolute_disparity, cluster_radius):
     
 
 
-def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
+def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True):
     
     """
     @param npy_path full path to the npy file with 4-layer data (242,324,4) - nn_disparity(offset), target_disparity, gt disparity, gt strength
@@ -485,10 +494,9 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
     @param absolute - True - the first layer contains absolute disparity, False - difference from target_disparity
     @param fix_nan - replace nan in target_disparity with 0 to apply offset, target_disparity will still contain nan
     """
-    tiff_path = npy_path.replace('.npy','.tiff')
     data = np.load(npy_path) #(324,242,4) [nn_disp, target_disp,gt_disp, gt_conf]
     nn_out =            0
-    target_disparity =  1     
+#    target_disparity =  1     
     gt_disparity =      2     
     gt_strength =       3     
     if not absolute:
@@ -501,19 +509,27 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
         data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2)
         data[...,6] -= data[...,gt_disparity] 
         data[...,7] -= data[...,gt_disparity]
-        for l in [4,5,6,7]:
+        for l in [2, 4, 5, 6, 7]:
             data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
         # All other layers - mast too
         for l in range(8,data.shape[2]):
             data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
-            
-#        data[...,4] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,4]])
-#       data[...,5] = np.select([data[...,3]==0.0, data[...,3]>0.0], [np.nan,data[...,5]])
+    return data        
+
+def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
+    
+    """
+    @param npy_path full path to the npy file with 4-layer data (242,324,4) - nn_disparity(offset), target_disparity, gt disparity, gt strength
+           data will be written as 4-layer tiff, extension '.npy' replaced with '.tiff'
+    @param absolute - True - the first layer contains absolute disparity, False - difference from target_disparity
+    @param fix_nan - replace nan in target_disparity with 0 to apply offset, target_disparity will still contain nan
+    """
+    data = result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas)
+    tiff_path = npy_path.replace('.npy','.tiff')
             
     data = data.transpose(2,0,1)
     print("Saving results to TIFF: "+tiff_path)
     imagej_tiffwriter.save(tiff_path,data[...,np.newaxis])        
-
 
 def eval_results(rslt_path, absolute,
                  min_disp =       -0.1, #minimal GT disparity
