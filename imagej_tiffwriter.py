@@ -100,7 +100,7 @@ def imagej_metadata_tags(metadata, byteorder):
 
 
 #def save(path,images,force_stack=False,force_hyperstack=False):
-def save(path,images,labels=None,label_prefix="Label"):
+def save(path,images,labels=None,label_prefix="Label "):
 
   '''
     labels a list or None
@@ -134,18 +134,15 @@ def save(path,images,labels=None,label_prefix="Label"):
     labels_list = []
     if labels is None:
       for i in range(images.shape[0]):
-        labels_list.append(label_prefix+str(i))
+        labels_list.append(label_prefix+str(i+1))
     else:
       labels_list = labels
-
-    print(labels_list)
 
     ijtags = imagej_metadata_tags({'Labels':labels_list}, '<')
 
     with tifffile.TiffWriter(path, bigtiff=False,imagej=True) as tif:
       for i in range(images.shape[0]):
-        print(images[i].shape)
-        tif.save(images[i], metadata={'version':'1.11a',' loop':False}, extratags=ijtags)
+        tif.save(images[i], metadata={'version':'1.11a','loop': False}, extratags=ijtags)
 
 # Testing
 if __name__ == "__main__":
@@ -160,7 +157,7 @@ if __name__ == "__main__":
   NX = 512
   NY = 512
 
-  images = np.empty((NT,NY,NX))
+  images = np.empty((NT,NY,NX),np.float32)
 
   import time
   print(str(time.time())+": Generating test images")
