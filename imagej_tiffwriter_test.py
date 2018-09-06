@@ -69,8 +69,6 @@ image = image[numpy.newaxis,...]
 
 ijtags = imagej_metadata_tags({'Labels':["Name1","Name2","Name3","Name4","Name5"]}, '<')
 
-print(ijtags)
-
 with tifffile.TiffWriter("multipage_test.tiff", bigtiff=False,imagej=True) as tif:
   for i in range(5):
     tif.save(image, metadata={'version':'20180905', 'loop':False}, extratags=ijtags)

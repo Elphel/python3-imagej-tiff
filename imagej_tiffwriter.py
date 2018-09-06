@@ -40,36 +40,77 @@ Usage example:
 
 '''
 
-from PIL import Image, TiffImagePlugin
 import numpy as np
+import struct
+import tifffile
 import math
 
-# DO NOT USE?
-# thing is the old ImageJs <1.52d poorly handle tags directories or something like that
-def __get_IJ_IFD(t,z,c):
+# from here: https://stackoverflow.com/questions/50258287/how-to-specify-colormap-when-saving-tiff-stack
+def imagej_metadata_tags(metadata, byteorder):
+    """Return IJMetadata and IJMetadataByteCounts tags from metadata dict.
 
-  ifd = TiffImagePlugin.ImageFileDirectory_v2()
+    The tags can be passed to the TiffWriter.save function as extratags.
 
-  ijheader = [
-    'ImageJ=',
-    'hyperstack=true',
-    'images='+str(t*z*c),
-    'channels='+str(c),
-    'slices='+str(z),
-    'frames='+str(t),
-    'loop=false'
-  ]
+    """
+    header = [{'>': b'IJIJ', '<': b'JIJI'}[byteorder]]
+    bytecounts = [0]
+    body = []
 
-  ifd[270] = ("\n".join(ijheader)+"\n")
+    def writestring(data, byteorder):
+        return data.encode('utf-16' + {'>': 'be', '<': 'le'}[byteorder])
 
-  #is_hyperstack = 'true' if len(shape)>1 else 'false'
-  #if (len(shape)>0):
+    def writedoubles(data, byteorder):
+        return struct.pack(byteorder+('d' * len(data)), *data)
 
-  return ifd
+    def writebytes(data, byteorder):
+        return data.tobytes()
+
+    metadata_types = (
+        ('Info', b'info', 1, writestring),
+        ('Labels', b'labl', None, writestring),
+        ('Ranges', b'rang', 1, writedoubles),
+        ('LUTs', b'luts', None, writebytes),
+        ('Plot', b'plot', 1, writebytes),
+        ('ROI', b'roi ', 1, writebytes),
+        ('Overlays', b'over', None, writebytes))
+
+    for key, mtype, count, func in metadata_types:
+        if key not in metadata:
+            continue
+        if byteorder == '<':
+            mtype = mtype[::-1]
+        values = metadata[key]
+        if count is None:
+            count = len(values)
+        else:
+            values = [values]
+        header.append(mtype + struct.pack(byteorder+'I', count))
+        for value in values:
+            data = func(value, byteorder)
+            body.append(data)
+            bytecounts.append(len(data))
+
+    body = b''.join(body)
+    header = b''.join(header)
+    data = header + body
+    bytecounts[0] = len(header)
+    bytecounts = struct.pack(byteorder+('I' * len(bytecounts)), *bytecounts)
+    return ((50839, 'B', len(data), data, True),
+            (50838, 'I', len(bytecounts)//4, bytecounts, True))
 
 
 #def save(path,images,force_stack=False,force_hyperstack=False):
-def save(path,images):
+def save(path,images,labels=None,label_prefix="Label"):
+
+  '''
+    labels a list or None
+  '''
+
+  '''
+    Expecting:
+    (h,w),
+    (n,h,w) - just create a simple stack
+  '''
 
   # Got images, analyze shape:
   #   - possible formats (c == depth):
@@ -78,46 +119,33 @@ def save(path,images):
   #     -- (h,w,c)
   #     -- (h,w)
 
-
   # 0 or 1 images.shapes are not handled
   #
   # (h,w)
   if len(images.shape)==2:
+    images = images[np.newaxis,...]
 
-    image = Image.fromarray(images)
-    image.save(path)
+  # now the shape length is 3
+  if len(images.shape)==3:
+    # tifffile treats shape[0] as channel, need to expand to get labels displayed
+    #images = images[images.shape[0],np.newaxis,images.shape[1],images.shape[2]]
+    images = np.reshape(images,(images.shape[0],1,images.shape[1],images.shape[2]))
 
-  elif len(images.shape)>2:
-
-    h,w,c  = images.shape[-3:]
-
-    if len(images.shape)==3:
-      images = np.reshape(images,(1,h,w,c))
-
-    z = images.shape[-4]
-
-    if len(images.shape)==4:
-      images = np.reshape(images,(1,z,h,w,c))
-
-    t  = images.shape[-5]
-
-    c_axis = -1
-
-    if c==1:
-      split_channels = images
+    labels_list = []
+    if labels is None:
+      for i in range(images.shape[0]):
+        labels_list.append(label_prefix+str(i))
     else:
-      channels = np.array(np.split(images,c,axis=c_axis))
-      split_channels = np.concatenate(channels,axis=-3)
+      labels_list = labels
 
-    images_flat = np.reshape(split_channels,(-1,h,w))
+    print(labels_list)
 
-    imlist = []
-    for i in range(images_flat.shape[0]):
-      imlist.append(Image.fromarray(images_flat[i]))
+    ijtags = imagej_metadata_tags({'Labels':labels_list}, '<')
 
-    imlist[0].save(path,save_all=True,append_images=imlist[1:])
-    # thing is the old ImageJs <1.52d poorly handle tags directories or something like that
-    #imlist[0].save(path,save_all=True,append_images=imlist[1:],tiffinfo=__get_IJ_IFD(t,z,c))
+    with tifffile.TiffWriter(path, bigtiff=False,imagej=True) as tif:
+      for i in range(images.shape[0]):
+        print(images[i].shape)
+        tif.save(images[i], metadata={'version':'1.11a',' loop':False}, extratags=ijtags)
 
 # Testing
 if __name__ == "__main__":
@@ -129,34 +157,15 @@ if __name__ == "__main__":
   hw = hamming_window
 
   NT = 5
-  NC = 2
-  NZ = 3
   NX = 512
   NY = 512
 
-  images = np.empty((NT,NZ,NY,NX,NC))
+  images = np.empty((NT,NY,NX))
 
   import time
   print(str(time.time())+": Generating test images")
   for t in range(NT):
-    for z in range(NZ):
-      for c in range(NC):
-        images[t,z,:,:,c] = np.array([[(255-t*25)*hw(i,512)*hw(j,512) for i in range(NX)] for j in range(NY)],np.float32)
+    images[t,:,:] = np.array([[(255-t*25)*hw(i,512)*hw(j,512) for i in range(NX)] for j in range(NY)],np.float32)
   print(str(time.time())+": Test images generated")
   print("Images shape: "+str(images.shape))
-
-  print("5D run")
-  v = save("result_5D.tiff",images)
-  print("4D run")
-  v = save("result_4D.tiff",images[0])
-  print("3D run")
-  v = save("result_3D.tiff",images[0,0])
-  print("3D run, 1 channel")
-  tmp_images = images[0,0,:,:,0]
-  v = save("result_3D1C.tiff",tmp_images[:,:,np.newaxis])
-
-
-
-
-
-
+  v = save("tiffwriter_test.tiff",images)
