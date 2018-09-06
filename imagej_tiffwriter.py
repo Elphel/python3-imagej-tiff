@@ -29,14 +29,13 @@ Usage example:
   import imagej_tiffwriter
   import numpy as np
 
-  # have a few images in the form of numpy arrays
-  # make sure to stack them as:
-  #   - (t,z,h,w,c)
-  #   - (z,h,w,c)
-  #   - (h,w,c)
-  #   - (h,w)
+  Have a few images in the form of numpy arrays np.float32:
+  - (h,w)
+  - (n,h,w)
+  
+  labels can be provided as a list
 
-  imagej_tiffwriter.save(path,images)
+  imagej_tiffwriter.save(path,images,labels)
 
 '''
 
