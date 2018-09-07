@@ -420,7 +420,7 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan):
         else:
             data[...,0] +=  data[...,1]
     data = data.transpose(2,0,1)
-    imagej_tiffwriter.save(tiff_path,data[...,np.newaxis])        
+    imagej_tiffwriter.save(tiff_path,data)        
 
 
 def eval_results(rslt_path, absolute,

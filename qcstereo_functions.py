@@ -3,7 +3,6 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
-#from numpy import float64
 import os
 import numpy as np
 import tensorflow as tf
@@ -46,7 +45,6 @@ def parseXmlConfig(conf_file, root_dir):
     files={}
     for p in root.find('files'):
         files[p.tag]=eval(p.text.strip())
-#    globals().update(parameters)
     dbg_parameters = {}
     for p in root.find('dbg_parameters'):
         dbg_parameters[p.tag]=eval(p.text.strip())
@@ -94,9 +92,6 @@ def readTFRewcordsEpoch(train_filename, cluster_radius):
     file_all =     os.path.join(npy_dir,filebasename + '.npy')
     if  os.path.exists(file_all):
         data =             np.load (file_all)
-#        corr2d=            np.load (file_corr2d)
-#        target_disparity = np.load(file_target_disparity)
-#        gt_ds =            np.load(file_gt_ds)
     else:     
         record_iterator = tf.python_io.tf_record_iterator(path=train_filename)
         corr2d_list=[]
@@ -152,16 +147,12 @@ def read_and_decode(filename_queue, featrures_per_tile):
     target_disparity = features['target_disparity'] # tf.decode_raw(features['target_disparity'], tf.float32)
     gt_ds =            tf.cast(features['gt_ds'], tf.float32) # tf.decode_raw(features['gt_ds'], tf.float32)
     in_features = tf.concat([corr2d,target_disparity],0)
-    # still some nan-s in correlation data?
-#    in_features_clean = tf.where(tf.is_nan(in_features), tf.zeros_like(in_features), in_features)     
-#    corr2d_out, target_disparity_out, gt_ds_out = tf.train.shuffle_batch( [in_features_clean, target_disparity, gt_ds],
     corr2d_out, target_disparity_out, gt_ds_out = tf.train.shuffle_batch( [in_features, target_disparity, gt_ds],
                                                  batch_size=1000, # 2,
                                                  capacity=30,
                                                  num_threads=2,
                                                  min_after_dequeue=10)
     return corr2d_out, target_disparity_out, gt_ds_out
-#http://adventuresinmachinelearning.com/introduction-tensorflow-queuing/
 def add_margins(npa,radius, val = np.nan):
     npa_ext = np.empty((npa.shape[0]+2*radius, npa.shape[1]+2*radius, npa.shape[2]), dtype = npa.dtype)
     npa_ext[radius:radius + npa.shape[0],radius:radius + npa.shape[1]] = npa
@@ -304,7 +295,6 @@ def initTrainTestData(
     """
     num_trains = len(files['train'])
     num_entries = num_trains * buffer_size  
-#    dataset_train_all = None
     dataset_train_merged = None
     train_next = [None]*num_trains
     for n_train, f_train in enumerate(files['train']):
@@ -402,7 +392,7 @@ def initImageData(files,
         print_time("  Done")
         return img_data
             
-def evaluateAllResults(result_files, absolute_disparity, cluster_radius):
+def evaluateAllResults(result_files, absolute_disparity, cluster_radius, labels=None):
     for result_file in result_files:
         try:
             print_time("Reading resuts from "+result_file, end=" ")
@@ -412,12 +402,12 @@ def evaluateAllResults(result_files, absolute_disparity, cluster_radius):
             continue
         print_time("Done")
         print_time("Saving resuts to tiff", end=" ")
-        result_npy_to_tiff(result_file, absolute_disparity, fix_nan = True)        
+        result_npy_to_tiff(result_file, absolute_disparity, fix_nan = True, labels=labels)        
         print_time("Done")
     
 
 
-def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True):
+def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=None):
     
     """
     @param npy_path full path to the npy file with 4-layer data (242,324,4) - nn_disparity(offset), target_disparity, gt disparity, gt strength
@@ -426,6 +416,9 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True):
     @param fix_nan - replace nan in target_disparity with 0 to apply offset, target_disparity will still contain nan
     """
     data = np.load(npy_path) #(324,242,4) [nn_disp, target_disp,gt_disp, gt_conf]
+    if labels is None:
+        labels = ["chn%d"%(i) for i in range(data.shape[0])]
+#    labels = ["nn_out","hier_out","gt_disparity","gt_strength"]
     nn_out =            0
 #    target_disparity =  1     
     gt_disparity =      2     
@@ -438,6 +431,7 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True):
     if insert_deltas:
         np.nan_to_num(data[...,gt_strength], copy=False)
         data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2)
+        labels = labels[:4]+["nn_out","hier_out","nn_err","hier_err"]+labels[4:]
         data[...,6] -= data[...,gt_disparity] 
         data[...,7] -= data[...,gt_disparity]
         for l in [2, 4, 5, 6, 7]:
@@ -445,9 +439,13 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True):
         # All other layers - mast too
         for l in range(8,data.shape[2]):
             data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
-    return data        
+    return data, labels        
 
-def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
+def result_npy_to_tiff(npy_path,
+                        absolute,
+                        fix_nan,
+                        insert_deltas=True,
+                        labels =      None):
     
     """
     @param npy_path full path to the npy file with 4-layer data (242,324,4) - nn_disparity(offset), target_disparity, gt disparity, gt strength
@@ -455,12 +453,12 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan, insert_deltas=True):
     @param absolute - True - the first layer contains absolute disparity, False - difference from target_disparity
     @param fix_nan - replace nan in target_disparity with 0 to apply offset, target_disparity will still contain nan
     """
-    data = result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas)
+    data,labels = result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas, labels=labels)
     tiff_path = npy_path.replace('.npy','.tiff')
             
     data = data.transpose(2,0,1)
     print("Saving results to TIFF: "+tiff_path)
-    imagej_tiffwriter.save(tiff_path,data[...,np.newaxis])        
+    imagej_tiffwriter.save(tiff_path,data,labels=labels)        
 
 def eval_results(rslt_path, absolute,
                  min_disp =       -0.1, #minimal GT disparity
@@ -469,7 +467,6 @@ def eval_results(rslt_path, absolute,
                  max_ofst_result = 1.0,
                  str_pow =         2.0,
                  radius =          0):
-#    for min_disparity, max_disparity, max_offset_target, max_offset_result, strength_pow in [
     variants = [[         -0.1,         5.0,              0.5,            0.5,          1.0],           
                 [         -0.1,         5.0,              0.5,            0.5,          2.0],
                 [         -0.1,         5.0,              0.2,            0.2,          1.0],

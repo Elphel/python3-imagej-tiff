@@ -5,13 +5,13 @@ __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
 
-from PIL import Image
+#from PIL import Image
 
 import os
 import sys
-import glob
+#import glob
 
-import numpy as np
+#import numpy as np
 
 import time
 

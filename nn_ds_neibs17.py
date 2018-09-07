@@ -101,6 +101,12 @@ NN_LAYOUTS = {0:[0,   0,   0,   32,  20,  16],
 NN_LAYOUT1 = NN_LAYOUTS[NET_ARCH1]
 NN_LAYOUT2 = NN_LAYOUTS[NET_ARCH2]
 USE_PARTIALS =      not PARTIALS_WEIGHTS is None # False - just a single Siamese net, True - partial outputs that use concentric squares of the first level subnets
+
+# Tiff export slice labels
+SLICE_LABELS =  ["nn_out_ext","hier_out_ext","gt_disparity","gt_strength",
+                 "cutcorn_cost_nw","cutcorn_cost",
+                 "gt-avg_dist","avg8_disp","gt_disp","out-avg"]
+
 ##############################################################################
 cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
 center_tile_index = 2 * CLUSTER_RADIUS * (CLUSTER_RADIUS + 1)
@@ -115,11 +121,11 @@ if not USE_PARTIALS:
 
 
 import tensorflow as tf
-#import tensorflow.contrib.slim as slim
 
 qsf.evaluateAllResults(result_files = files['result'],
                        absolute_disparity = ABSOLUTE_DISPARITY,
-                       cluster_radius = CLUSTER_RADIUS)
+                       cluster_radius =     CLUSTER_RADIUS,
+                       labels =             SLICE_LABELS)
 
 image_data = qsf.initImageData(
                 files =          files,
@@ -130,14 +136,12 @@ image_data = qsf.initImageData(
                 width =          IMG_WIDTH,
                 replace_nans =   True)
     
-#    return train_next, dataset_train_all, datasets_test
 corr2d_len, target_disparity_len, _ = qsf.get_lengths(CLUSTER_RADIUS, TILE_LAYERS, TILE_SIDE)
  
 train_next, dataset_train, datasets_test= qsf.initTrainTestData(
         files = files,
         cluster_radius =      CLUSTER_RADIUS,
         buffer_size =         TRAIN_BUFFER_SIZE * BATCH_SIZE) # number of clusters per train
-##    return corr2d_len, target_disparity_len, train_next, dataset_train_merged, datasets_test
 
     
 corr2d_train_placeholder =           tf.placeholder(dataset_train.dtype, (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
@@ -153,15 +157,9 @@ tf_batch_weights = tf.placeholder(shape=(None,), dtype=tf.float32, name = "batch
 feed_batch_weights =   np.array(BATCH_WEIGHTS*(BATCH_SIZE//len(BATCH_WEIGHTS)), dtype=np.float32)
 feed_batch_weight_1 =  np.array([1.0], dtype=np.float32) 
 
-##dataset_train_size = len(datasets_train[0]['corr2d'])
-##dataset_train_size //= BATCH_SIZE
-
-#dataset_train_size = TRAIN_BUFFER_GPU * num_train_subs # TRAIN_BUFFER_SIZE
-
-#dataset_test_size = len(datasets_test[0]['corr2d'])
 dataset_test_size = len(datasets_test[0])
 dataset_test_size //= BATCH_SIZE
-#dataset_img_size = len(datasets_img[0]['corr2d'])
+
 dataset_img_size = len(image_data[0]['corr2d'])
 dataset_img_size //= BATCH_SIZE
 
@@ -170,7 +168,6 @@ dataset_tt = dataset_tt.prefetch(BATCH_SIZE)
 iterator_tt = dataset_tt.make_initializable_iterator()
 next_element_tt = iterator_tt.get_next()
 
-#https://www.tensorflow.org/versions/r1.5/programmers_guide/datasets
 result_dir = './attic/result_neibs_'+     SUFFIX+'/'
 checkpoint_dir = './attic/result_neibs_'+ SUFFIX+'/'
 save_freq = 500
@@ -181,7 +178,6 @@ def debug_gt_variance(
         gt_ds_batch # [?:9:2]
         ):
     with tf.name_scope("Debug_GT_Variance"):
-#        tf_num_tiles =  tf.shape(gt_ds_batch)[0]
         d_gt_this =     tf.reshape(gt_ds_batch[:,2 * indx],[-1],                     name = "d_this")
         d_gt_center =   tf.reshape(gt_ds_batch[:,2 * center_indx],[-1],              name = "d_center")
         d_gt_diff =     tf.subtract(d_gt_this, d_gt_center,                          name = "d_diff")
@@ -189,9 +185,6 @@ def debug_gt_variance(
         d_gt_var =      tf.reduce_mean(d_gt_diff2,                                   name = "d_gt_var")
         return  d_gt_var
     
-#def batchLoss
-        
-        
 target_disparity_cluster = tf.reshape(next_element_tt['target_disparity'], [-1,cluster_size, 1], name="targdisp_cluster")    
 corr2d_Nx325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,FEATURES_PER_TILE], name="coor2d_cluster"),
                           target_disparity_cluster], axis=2, name = "corr2d_Nx325")
@@ -223,7 +216,6 @@ tf_partial_weights = tf.constant(PARTIALS_WEIGHTS,dtype=tf.float32,name="partial
 G_losses = [0.0]*len(partials)
 target_disparity_batch=  next_element_tt['target_disparity'][:,center_tile_index:center_tile_index+1]
 gt_ds_batch_clust =      next_element_tt['gt_ds']
-#gt_ds_batch =            next_element_tt['gt_ds'][:,2 * center_tile_index: 2 * (center_tile_index +1)]
 gt_ds_batch =            gt_ds_batch_clust[:,2 * center_tile_index: 2 * (center_tile_index +1)]
 G_losses[0], _disp_slice, _d_gt_slice, _out_diff, _out_diff2, _w_norm, _out_wdiff2, _cost1 = qcstereo_losses.batchLoss(
               out_batch =              outs[0],        # [batch_size,(1..2)] tf_result
@@ -282,8 +274,6 @@ else:
     S_loss =   tf.constant(0.0, dtype=tf.float32,name = "S_loss")
     GS_loss = G_losses_sum # G_loss
         
-#    G_loss +=  Glosses[n]*PARTIALS_WEIGHTS[n]
-#tf_partial_weights
 if WLOSS_LAMBDA > 0.0:   
     W_loss =     qcstereo_losses.weightsLoss(
         inp_weights =   inp_weights[0], #    inp_weights - list of tensors, currently - just [0]
@@ -291,12 +281,11 @@ if WLOSS_LAMBDA > 0.0:
         tile_side =     TILE_SIDE, # 9
         wborders_zero = WBORDERS_ZERO)
 
-#    GW_loss =    tf.add(G_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
     GW_loss =    tf.add(GS_loss, WLOSS_LAMBDA * W_loss, name = "GW_loss")
 else:
     GW_loss =    GS_loss # G_loss
     W_loss =     tf.constant(0.0, dtype=tf.float32,name = "W_loss")
-#debug
+
 GT_variance =  debug_gt_variance(indx = 0,        # This tile index (0..8)
                                  center_indx = 4, # center tile index
                                  gt_ds_batch = next_element_tt['gt_ds'])# [?:18]
@@ -319,8 +308,6 @@ with tf.name_scope('sample'):
     tf.summary.scalar("gtvar_diff",   GT_variance)
     
 with tf.name_scope('epoch_average'):
-#    for i, tl in enumerate(tf_ph_G_losses):
-#       tf.summary.scalar("GW_loss_epoch_"+str(i), tl)
     for i in range(tf_ph_G_losses.shape[0]):
         tf.summary.scalar("G_loss_epoch_"+str(i), tf_ph_G_losses[i])
         
@@ -375,7 +362,7 @@ with tf.Session()  as sess:
     loss_w_train_hist=   np.empty(dataset_train_size, dtype=np.float32)
     
     loss_gw_test_hist=  np.empty(dataset_test_size, dtype=np.float32)
-#    loss_g_test_hist=   np.empty(dataset_test_size, dtype=np.float32)
+
     loss_g_test_hists=   [np.empty(dataset_test_size, dtype=np.float32) for p in partials]
     
     loss_s_test_hist=   np.empty(dataset_test_size, dtype=np.float32)
@@ -465,12 +452,10 @@ with tf.Session()  as sess:
         
         for i in range(dataset_train_size):
             try:
-#                train_summary,_, GW_loss_trained,  G_loss_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
                 train_summary,_, GW_loss_trained,  G_losses_trained,  S_loss_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
                     [   merged,
                         G_opt,
                         GW_loss,
-#                        G_loss,
                         G_losses,
                         S_loss,
                         W_loss,
@@ -506,13 +491,12 @@ with tf.Session()  as sess:
             except tf.errors.OutOfRangeError:
                 print("****** NO MORE DATA! train done at step %d"%(i))
                 break
-#            print ("==== i=%d, GW_loss_trained=%f  loss_gw_train_hist[%d]=%f ===="%(i,GW_loss_trained,i,loss_gw_train_hist[i]))
 
         train_gw_avg =      np.average(loss_gw_train_hist).astype(np.float32)     
         train_g_avg =       np.average(loss_g_train_hist).astype(np.float32) 
         for nn, lgth  in enumerate(loss_g_train_hists):
             train_g_avgs[nn] =       np.average(lgth).astype(np.float32)
-###############        
+        
         train_s_avg =       np.average(loss_s_train_hist).astype(np.float32)     
         train_w_avg =       np.average(loss_w_train_hist).astype(np.float32)     
         train2_avg =      np.average(loss2_train_hist).astype(np.float32)
@@ -638,7 +622,6 @@ with tf.Session()  as sess:
                              ],
                              feed_dict={
                                         tf_batch_weights: feed_batch_weight_1, # feed_batch_weights,
-#                                        lr:               learning_rate,
                                         tf_ph_GW_loss:    test_gw_avg,
                                         tf_ph_G_loss:     test_g_avg,
                                         tf_ph_G_losses:   train_g_avgs, # temporary, there is o data for test
@@ -671,7 +654,6 @@ with tf.Session()  as sess:
                 except:
                     pass     
 
-#                rslt = np.concatenate([disp_out.reshape(-1,1), t_disp, gtruth],1)
                 rslt = np.concatenate(
                     [disp_out.reshape(-1,1),
                      dataset_img['t_disps'], #t_disps[ntest],
@@ -682,12 +664,13 @@ with tf.Session()  as sess:
                      dbg_avg_disparity.reshape(-1,1),
                      dbg_gt_disparity.reshape(-1,1),
                      dbg_offs.reshape(-1,1)],1)
+
                 np.save(result_file,           rslt.reshape(HEIGHT,WIDTH,-1))
                 rslt = qsf.eval_results(result_file, ABSOLUTE_DISPARITY,radius=CLUSTER_RADIUS)                
                 img_gain_test0 = rslt[0][0]/rslt[0][1]   
                 img_gain_test9 = rslt[9][0]/rslt[9][1]   
                 if SAVE_TIFFS:
-                    qsf.result_npy_to_tiff(result_file, ABSOLUTE_DISPARITY, fix_nan = True)
+                    qsf.result_npy_to_tiff(result_file, ABSOLUTE_DISPARITY, fix_nan = True,labels=SLICE_LABELS)
                     
                 """
                 Remove dataset_img (if it is not [0] to reduce memory footprint         
@@ -699,7 +682,6 @@ with tf.Session()  as sess:
     train_writer.close()
     test_writer.close()
     test_writer1.close()
-#reports error: Exception ignored in: <bound method BaseSession.__del__ of <tensorflow.python.client.session.Session object at 0x7efc5f720ef0>> if there is no print before exit()
 
 print("All done")
 exit (0)

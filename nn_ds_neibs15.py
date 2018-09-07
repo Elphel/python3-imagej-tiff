@@ -424,7 +424,7 @@ def result_npy_to_tiff(npy_path, absolute, fix_nan):
         else:
             data[...,0] +=  data[...,1]
     data = data.transpose(2,0,1)
-    imagej_tiffwriter.save(tiff_path,data[...,np.newaxis])        
+    imagej_tiffwriter.save(tiff_path,data)        
 
 
 def eval_results(rslt_path, absolute,
@@ -1161,6 +1161,7 @@ with tf.Session()  as sess:
     
     num_train_variants = len(datasets_train)
     thr=None;
+    thr_result = None
     trains_to_update = [train_next[n_train]['files'] > train_next[n_train]['slots'] for n_train in range(len(train_next))]
     for epoch in range (EPOCHS_TO_RUN):
         """
