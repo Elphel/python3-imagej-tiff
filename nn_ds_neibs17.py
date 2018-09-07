@@ -417,9 +417,9 @@ with tf.Session()  as sess:
         if (FILE_UPDATE_EPOCHS > 0) and (epoch % FILE_UPDATE_EPOCHS == 0):
             if not thr is None:
                 if thr.is_alive():
-                    qsf.print_time("Waiting until tfrecord gets loaded", end=" ")
+                    qsf.print_time("***WAITING*** until tfrecord gets loaded", end=" ")
                 else:
-                    qsf.print_time("tfrecord is already loaded loaded", end=" ")
+                    qsf.print_time("tfrecord is ***ALREADY LOADED*** loaded", end=" ")
         
                 thr.join()
                 qsf.print_time("Done")
