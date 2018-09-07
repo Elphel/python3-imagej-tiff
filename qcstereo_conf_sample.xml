@@ -2,7 +2,7 @@
 <properties>
     <parameters>
         <EPOCHS_TO_RUN>        650 </EPOCHS_TO_RUN> <!-- 752# 3000#0 #0 -->
-        <NET_ARCH1>              0 </NET_ARCH1> <!--1-st stage network  -->
+        <NET_ARCH1>              1 </NET_ARCH1> <!--1-st stage network  -->
         <NET_ARCH2>              9 </NET_ARCH2> <!-- 2-nd stage network -->
         <SYM8_SUB>           False </SYM8_SUB>          <!-- enforce inputs from 2d correlation have symmetrical ones (groups of 8) -->
         <SPREAD_CONVERGENCE> False </SPREAD_CONVERGENCE><!-- Input target disparity to all nodes of the 1-st stage -->
@@ -22,7 +22,7 @@
         <ONLY_TILE>           None </ONLY_TILE>           <!--  (remove all but center tile data), put None here for normal operation) -->
         <CLUSTER_RADIUS>         2 </CLUSTER_RADIUS>      <!--  1 # 1 - 3x3, 2 - 5x5 tiles -->
         <SHUFFLE_FILES>       True </SHUFFLE_FILES>
-        <WLOSS_LAMBDA>         3.0 </WLOSS_LAMBDA>        <!-- fraction of the W_loss (input layers weight non-uniformity) added to G_loss -->
+        <WLOSS_LAMBDA>         0.1 </WLOSS_LAMBDA>        <!-- fraction of the W_loss (input layers weight non-uniformity) added to G_loss -->
         <SLOSS_LAMBDA>         0.1 </SLOSS_LAMBDA>        <!-- weight of loss for smooth fg/bg transitions -->
         <SLOSS_CLIP>           0.2 </SLOSS_CLIP>          <!-- limit punishment for cutting corners (disparity pix) -->
         <WBORDERS_ZERO>       True </WBORDERS_ZERO>       <!-- Border conditions for first layer weights: False - free, True - tied to 0 -->
@@ -35,7 +35,20 @@
         <BATCH_WEIGHTS> [0.9, 1.0, 0.9, 1.0]</BATCH_WEIGHTS> <!-- lvar, hvar, lvar1, hvar1 (increase importance of non-flat clusters -->
         <DISP_DIFF_CAP>       0.3  </DISP_DIFF_CAP><!-- cap disparity difference (do not increase loss above)-->
         <DISP_DIFF_SLOPE>     0.03 </DISP_DIFF_SLOPE><!-- allow squared error to grow above DISP_DIFF_CAP -->
+        <TRAIN_BUFFER_GPU>      79 </TRAIN_BUFFER_GPU> <!-- in batches merged (now quad)  batches-->
+        <TRAIN_BUFFER_CPU>       4 </TRAIN_BUFFER_CPU> <!-- in TRAIN_BUFFER_GPU-s -->
+        
     </parameters>
+    <dbg_parameters>
+        <disparity_ranges>
+            [[[0.0, 0.6,[140,230,135,60]],                                "Overlook"],
+             [[0.0, 1.0,[120,180,125,80]],[2.0, 4.0,   [50,130,125, 70]], "State Street1"],            
+             [[0.0, 1.0,[130,210,135,95]],[0.5, 2.5,   [50,150,150, 75]], "State Street2"],
+             [                            [1.0, 2.5,   [90,170, 50,  0]], "B737 near"],
+             [                            [0.75, 1.5, [125,150, 90, 70]], "B737 midrange"],
+             [                            [0.4,  0.8, [135,150,102,112]], "B737 far"]]
+        </disparity_ranges>
+    </dbg_parameters>
     <directories>
         <train_lvar>
             "tf_data_5x5_main_1"
@@ -211,8 +224,8 @@
         </test_hvar>
         
         <images>
-            ["1527256858_150165-v01", <!-- State Street -->
-             "1527257933_150165-v04", <!--  overlook -->
+            ["1527257933_150165-v04", <!--  overlook -->
+             "1527256858_150165-v01", <!--  State Street -->
              "1527256816_150165-v02", <!--  State Street -->
              "1527182802_096892-v02", <!--  plane near plane -->
              "1527182805_096892-v02", <!--  plane midrange used up to -49 plane -->

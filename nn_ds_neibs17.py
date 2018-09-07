@@ -7,30 +7,16 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
-
-##from PIL import Image
-
+#python3 nn_ds_neibs17.py /home/eyesis/x3d_data/data_sets/conf/qcstereo_conf13.xml /home/eyesis/x3d_data/data_sets
 import os
 import sys
-##import glob
-
 import numpy as np
-##import itertools
-
 import time
-
-##import matplotlib.pyplot as plt
-
 import shutil
 from threading import Thread
-
-#import imagej_tiffwriter
-
 import qcstereo_network
 import qcstereo_losses
 import qcstereo_functions as qsf
-
-#import xml.etree.ElementTree as ET
 
 qsf.TIME_START = time.time()
 qsf.TIME_LAST  = qsf.TIME_START
@@ -69,11 +55,15 @@ USE_CONFIDENCE, WBORDERS_ZERO, EPOCHS_TO_RUN, FILE_UPDATE_EPOCHS = [None] * 4
 LR600,LR400,LR200,LR100,LR = [None]*5
 SHUFFLE_FILES, EPOCHS_FULL_TEST, SAVE_TIFFS = [None] * 3
 
+TRAIN_BUFFER_GPU, TRAIN_BUFFER_CPU = [None]*2
 
-
+"""
+Next gets globals from the config file
+"""
 globals().update(parameters)
 
 
+TRAIN_BUFFER_SIZE = TRAIN_BUFFER_GPU * TRAIN_BUFFER_CPU # in merged (quad) batches
 
 
 
@@ -111,15 +101,6 @@ NN_LAYOUTS = {0:[0,   0,   0,   32,  20,  16],
 NN_LAYOUT1 = NN_LAYOUTS[NET_ARCH1]
 NN_LAYOUT2 = NN_LAYOUTS[NET_ARCH2]
 USE_PARTIALS =      not PARTIALS_WEIGHTS is None # False - just a single Siamese net, True - partial outputs that use concentric squares of the first level subnets
-#http://stackoverflow.com/questions/287871/print-in-terminal-with-colors-using-python
-#reading to memory (testing)
-train_next = [{'file':0, 'slot':0, 'files':0, 'slots':0},
-              {'file':0, 'slot':0, 'files':0, 'slots':0}]
-
-if TWO_TRAINS:
-    train_next +=  [{'file':0, 'slot':0, 'files':0, 'slots':0},
-                    {'file':0, 'slot':0, 'files':0, 'slots':0}]
-
 ##############################################################################
 cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
 center_tile_index = 2 * CLUSTER_RADIUS * (CLUSTER_RADIUS + 1)
@@ -141,37 +122,44 @@ qsf.evaluateAllResults(result_files = files['result'],
                        cluster_radius = CLUSTER_RADIUS)
 
 image_data = qsf.initImageData(
-                  files =          files,
-                  max_imgs =       MAX_IMGS_IN_MEM,
-                  cluster_radius = CLUSTER_RADIUS,
-                  width =          IMG_WIDTH,
-                  replace_nans =   True)
-
-
-
-datasets_train, datasets_test, num_train_sets= qsf.initTrainTestData(
-    files =               files,
-    cluster_radius =      CLUSTER_RADIUS,
-    max_files_per_group = MAX_FILES_PER_GROUP, # shuffling buffer for files
-    two_trains =          TWO_TRAINS,
-    train_next =          train_next)   
+                files =          files,
+                max_imgs =       MAX_IMGS_IN_MEM,
+                cluster_radius = CLUSTER_RADIUS,
+                tile_layers =    TILE_LAYERS,
+                tile_side =      TILE_SIDE,
+                width =          IMG_WIDTH,
+                replace_nans =   True)
     
-corr2d_train_placeholder =           tf.placeholder(datasets_train[0]['corr2d'].dtype,           (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
-target_disparity_train_placeholder = tf.placeholder(datasets_train[0]['target_disparity'].dtype, (None,1 *   cluster_size))  #target_disparity_train.shape)
-gt_ds_train_placeholder =            tf.placeholder(datasets_train[0]['gt_ds'].dtype,            (None,2 *   cluster_size)) #gt_ds_train.shape)
+#    return train_next, dataset_train_all, datasets_test
+corr2d_len, target_disparity_len, _ = qsf.get_lengths(CLUSTER_RADIUS, TILE_LAYERS, TILE_SIDE)
+ 
+train_next, dataset_train, datasets_test= qsf.initTrainTestData(
+        files = files,
+        cluster_radius =      CLUSTER_RADIUS,
+        buffer_size =         TRAIN_BUFFER_SIZE * BATCH_SIZE) # number of clusters per train
+##    return corr2d_len, target_disparity_len, train_next, dataset_train_merged, datasets_test
+
+    
+corr2d_train_placeholder =           tf.placeholder(dataset_train.dtype, (None,FEATURES_PER_TILE * cluster_size)) # corr2d_train.shape)
+target_disparity_train_placeholder = tf.placeholder(dataset_train.dtype, (None,1 *   cluster_size))  #target_disparity_train.shape)
+gt_ds_train_placeholder =            tf.placeholder(dataset_train.dtype, (None,2 *   cluster_size)) #gt_ds_train.shape)
 
 dataset_tt = tf.data.Dataset.from_tensor_slices({
-    "corr2d":corr2d_train_placeholder,
+    "corr2d":           corr2d_train_placeholder,
     "target_disparity": target_disparity_train_placeholder,
-    "gt_ds": gt_ds_train_placeholder})
+    "gt_ds":            gt_ds_train_placeholder})
 
 tf_batch_weights = tf.placeholder(shape=(None,), dtype=tf.float32, name = "batch_weights") # way to increase importance of the high variance clusters 
 feed_batch_weights =   np.array(BATCH_WEIGHTS*(BATCH_SIZE//len(BATCH_WEIGHTS)), dtype=np.float32)
 feed_batch_weight_1 =  np.array([1.0], dtype=np.float32) 
 
-dataset_train_size = len(datasets_train[0]['corr2d'])
-dataset_train_size //= BATCH_SIZE
-dataset_test_size = len(datasets_test[0]['corr2d'])
+##dataset_train_size = len(datasets_train[0]['corr2d'])
+##dataset_train_size //= BATCH_SIZE
+
+#dataset_train_size = TRAIN_BUFFER_GPU * num_train_subs # TRAIN_BUFFER_SIZE
+
+#dataset_test_size = len(datasets_test[0]['corr2d'])
+dataset_test_size = len(datasets_test[0])
 dataset_test_size //= BATCH_SIZE
 #dataset_img_size = len(datasets_img[0]['corr2d'])
 dataset_img_size = len(image_data[0]['corr2d'])
@@ -351,7 +339,7 @@ lr=                tf.placeholder(tf.float32)
 G_opt=             tf.train.AdamOptimizer(learning_rate=lr).minimize(GW_loss)
 
 
-ROOT_PATH  = './attic/nn_ds_neibs16_graph'+SUFFIX+"/"
+ROOT_PATH  = './attic/nn_ds_neibs17_graph'+SUFFIX+"/"
 TRAIN_PATH =  ROOT_PATH + 'train'
 TEST_PATH  =  ROOT_PATH + 'test'
 TEST_PATH1  = ROOT_PATH + 'test1'
@@ -363,6 +351,9 @@ shutil.rmtree(TEST_PATH1, ignore_errors=True)
 
 WIDTH=324
 HEIGHT=242
+
+num_train_subs = len(train_next) # number of (different type) merged training sets    
+dataset_train_size = TRAIN_BUFFER_GPU * num_train_subs # TRAIN_BUFFER_SIZE
 
 with tf.Session()  as sess:
     
@@ -415,10 +406,9 @@ with tf.Session()  as sess:
     img_gain_test0 =  1.0
     img_gain_test9 =  1.0
     
-    num_train_variants = len(datasets_train)
     thr=None
     thr_result = None
-    trains_to_update = [train_next[n_train]['files'] > train_next[n_train]['slots'] for n_train in range(len(train_next))]
+    trains_to_update = [train_next[n_train]['more_files'] for n_train in range(len(train_next))]
     for epoch in range (EPOCHS_TO_RUN):
         """
         update files after each epoch, all 4.
@@ -436,23 +426,19 @@ with tf.Session()  as sess:
                 qsf.print_time("Inserting new data", end=" ")
                 for n_train in range(len(trains_to_update)):
                     if trains_to_update[n_train]:
-#                        print("n_train= %d, len(thr_result)=%d"%(n_train,len(thr_result)))
-                        qsf.replaceNextDataset(datasets_train,
-                                           thr_result[n_train],
-                                           train_next= train_next[n_train],
-                                           nset=n_train,
-                                           period=len(train_next))
-                        qsf._nextFileSlot(train_next[n_train])
+                        qsf.add_file_to_dataset(dataset = dataset_train,
+                                                new_dataset = thr_result[n_train],
+                                                train_next = train_next[n_train])
                 qsf.print_time("Done")
             thr_result = []
             fpaths = []
-            for n_train in range(len(train_next)):
-                if train_next[n_train]['files'] > train_next[n_train]['slots']:
+            for n_train in range(len(trains_to_update)):
+                if trains_to_update[n_train]:
                     fpaths.append(files['train'][n_train][train_next[n_train]['file']])
                     qsf.print_time("Will read in background: "+fpaths[-1])
             thr = Thread(target=qsf.getMoreFiles, args=(fpaths,thr_result, CLUSTER_RADIUS, HOR_FLIP, TILE_LAYERS, TILE_SIDE))            
             thr.start()        
-        file_index = epoch  % num_train_variants
+        train_buf_index = epoch %   TRAIN_BUFFER_CPU # GPU memory from CPU memory (now 4)
         if   epoch >=600:
             learning_rate = LR600
         elif epoch >=400:
@@ -463,20 +449,20 @@ with tf.Session()  as sess:
             learning_rate = LR100
         else:
             learning_rate = LR
-#        print ("sr1",file=sys.stderr,end=" ")
-        if (file_index == 0) and SHUFFLE_FILES:
-            num_train_sets # num_sets = len(datasets_train_all)
+        if (train_buf_index == 0) and SHUFFLE_FILES:
             qsf.print_time("Shuffling how datasets datasets_train_lvar and datasets_train_hvar are zipped together", end="")
-            for i in range(num_train_sets):
-                qsf.shuffle_in_place (datasets_train, i, num_train_sets)
+            qsf.shuffle_in_place(
+                dataset_data = dataset_train, #alternating clusters from 4 sources.each cluster has all needed data (concatenated)
+                period = num_train_subs)
             qsf.print_time("  Done")
-            qsf.print_time("Shuffling tile chunks ", end="")
-            qsf.shuffle_chunks_in_place (datasets_train, 1)
-            qsf.print_time("  Done")
-            
-        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           datasets_train[file_index]['corr2d'],
-                                                     target_disparity_train_placeholder: datasets_train[file_index]['target_disparity'],
-                                                     gt_ds_train_placeholder:            datasets_train[file_index]['gt_ds']})
+        sti = train_buf_index *  dataset_train_size * BATCH_SIZE #      TRAIN_BUFFER_GPU * num_train_subs
+        eti = sti+   dataset_train_size * BATCH_SIZE#    (train_buf_index +1) *  TRAIN_BUFFER_GPU * num_train_subs
+         
+        sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:           dataset_train[sti:eti,:corr2d_len], 
+                                                     target_disparity_train_placeholder: dataset_train[sti:eti,corr2d_len:corr2d_len+target_disparity_len],
+                                                     gt_ds_train_placeholder:            dataset_train[sti:eti,corr2d_len+target_disparity_len:] })
+        
+        
         for i in range(dataset_train_size):
             try:
 #                train_summary,_, GW_loss_trained,  G_loss_trained,  W_loss_trained,  output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance  = sess.run(
@@ -511,7 +497,6 @@ with tf.Session()  as sess:
                                tf_img_test9:     img_gain_test9}) # previous value of *_avg #Fetch argument 0.0 has invalid type <class 'float'>, must be a string or Tensor. (Can not convert a float into a Tensor or Operation.)
                 
                 loss_gw_train_hist[i] = GW_loss_trained
-#                loss_g_train_hist[i] =  G_loss_trained
                 for nn, gl  in enumerate(G_losses_trained):
                     loss_g_train_hists[nn][i] =  gl
                 loss_s_train_hist[i] =  S_loss_trained
@@ -519,8 +504,9 @@ with tf.Session()  as sess:
                 loss2_train_hist[i] = out_cost1
                 gtvar_train_hist[i] = gt_variance
             except tf.errors.OutOfRangeError:
-                print("train done at step %d"%(i))
+                print("****** NO MORE DATA! train done at step %d"%(i))
                 break
+#            print ("==== i=%d, GW_loss_trained=%f  loss_gw_train_hist[%d]=%f ===="%(i,GW_loss_trained,i,loss_gw_train_hist[i]))
 
         train_gw_avg =      np.average(loss_gw_train_hist).astype(np.float32)     
         train_g_avg =       np.average(loss_g_train_hist).astype(np.float32) 
@@ -536,9 +522,10 @@ with tf.Session()  as sess:
         tst_avg =        [0.0]*len(datasets_test)
         tst2_avg =       [0.0]*len(datasets_test)
         for ntest,dataset_test in enumerate(datasets_test):
-            sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:      dataset_test['corr2d'],
-                                                    target_disparity_train_placeholder: dataset_test['target_disparity'],
-                                                    gt_ds_train_placeholder:            dataset_test['gt_ds']})
+            sess.run(iterator_tt.initializer, feed_dict={corr2d_train_placeholder:      dataset_test[:, :corr2d_len],  #['corr2d'],
+                                                    target_disparity_train_placeholder: dataset_test[:, corr2d_len:corr2d_len+target_disparity_len], # ['target_disparity'],
+                                                    gt_ds_train_placeholder:            dataset_test[:, corr2d_len+target_disparity_len:] }) # ['gt_ds']})
+            
             for i in range(dataset_test_size):
                 try:
                     test_summaries[ntest], GW_loss_tested, G_losses_tested, S_loss_tested, W_loss_tested, output, disp_slice, d_gt_slice, out_diff, out_diff2, w_norm, out_wdiff2, out_cost1, gt_variance = sess.run(
@@ -597,8 +584,12 @@ with tf.Session()  as sess:
         test_writer.add_summary(test_summaries[0], epoch)
         test_writer1.add_summary(test_summaries[1], epoch)
         
-        qsf.print_time("%d:%d -> %f %f %f (%f %f %f) dbg:%f %f"%(epoch,i,train_gw_avg, tst_avg[0], tst_avg[1], train2_avg, tst2_avg[0], tst2_avg[1], gtvar_train_avg, gtvar_test_avg))
+        qsf.print_time("==== %d:%d -> %f %f %f (%f %f %f) dbg:%f %f ===="%(epoch,i,train_gw_avg, tst_avg[0], tst_avg[1], train2_avg, tst2_avg[0], tst2_avg[1], gtvar_train_avg, gtvar_test_avg))
         if (((epoch + 1) == EPOCHS_TO_RUN) or (((epoch + 1) % EPOCHS_FULL_TEST) == 0)) and (len(image_data) > 0) :
+            if (epoch + 1) == EPOCHS_TO_RUN: # last
+                print("Last epoch, removing train/test datasets to reduce memory footprint")
+                del(dataset_train)
+                del(dataset_test)             
             last_epoch = (epoch + 1) == EPOCHS_TO_RUN
             ind_img = [0]
             if last_epoch:
@@ -622,6 +613,8 @@ with tf.Session()  as sess:
                     files =          files,
                     indx =           ntest,
                     cluster_radius = CLUSTER_RADIUS,
+                    tile_layers =    TILE_LAYERS,
+                    tile_side =      TILE_SIDE,
                     width =          IMG_WIDTH,
                     replace_nans =   True)
 

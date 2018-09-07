@@ -83,25 +83,20 @@ def prepareFiles(dirs, files, suffix):
     for i, path in enumerate(files['images']):
         files['images'][i] =      os.path.join(dirs['images'],    path+'.tfrecords')
 
-def readTFRewcordsEpoch(train_filename):
+def readTFRewcordsEpoch(train_filename, cluster_radius):
     if not  '.tfrecords' in train_filename:
         train_filename += '.tfrecords'
     npy_dir_name = "npy"
     dirname = os.path.dirname(train_filename) 
     npy_dir = os.path.join(dirname, npy_dir_name)
-#    filebasename, file_extension = os.path.splitext(train_filename)
     filebasename, _ = os.path.splitext(train_filename)
     filebasename = os.path.basename(filebasename)
-    file_corr2d =           os.path.join(npy_dir,filebasename + '_corr2d.npy')
-    file_target_disparity = os.path.join(npy_dir,filebasename + '_target_disparity.npy')
-    file_gt_ds =            os.path.join(npy_dir,filebasename + '_gt_ds.npy')
-    if (os.path.exists(file_corr2d) and
-        os.path.exists(file_target_disparity) and
-        os.path.exists(file_gt_ds)):
-        corr2d=            np.load (file_corr2d)
-        target_disparity = np.load(file_target_disparity)
-        gt_ds =            np.load(file_gt_ds)
-        pass
+    file_all =     os.path.join(npy_dir,filebasename + '.npy')
+    if  os.path.exists(file_all):
+        data =             np.load (file_all)
+#        corr2d=            np.load (file_corr2d)
+#        target_disparity = np.load(file_target_disparity)
+#        gt_ds =            np.load(file_gt_ds)
     else:     
         record_iterator = tf.python_io.tf_record_iterator(path=train_filename)
         corr2d_list=[]
@@ -118,30 +113,25 @@ def readTFRewcordsEpoch(train_filename):
         target_disparity = np.array(target_disparity_list)
         gt_ds =            np.array(gt_ds_list)
         try:
-            os.makedirs(os.path.dirname(file_corr2d))
+            os.makedirs(os.path.dirname(file_all))
         except:
-            pass     
+            pass
+        if cluster_radius > 0:
+            reformat_to_clusters(corr2d, target_disparity, gt_ds, cluster_radius)
+        data = np.concatenate([corr2d, target_disparity, gt_ds],axis = 1)
+        np.save(file_all, data)
+    
+    return data
 
-        np.save(file_corr2d,           corr2d)
-        np.save(file_target_disparity, target_disparity)
-        np.save(file_gt_ds,            gt_ds)
-    return corr2d, target_disparity, gt_ds
 
 def getMoreFiles(fpaths,rslt, cluster_radius, hor_flip, tile_layers, tile_side):
     for fpath in fpaths:
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-        dataset = {"corr2d":           corr2d,
-                     "target_disparity": target_disparity,
-                     "gt_ds":            gt_ds}
-        """
-        if FILE_TILE_SIDE > TILE_SIDE:
-            reduce_tile_size([dataset],   TILE_LAYERS, TILE_SIDE)
-        """
-        reformat_to_clusters([dataset], cluster_radius)
+        dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+        
         if hor_flip:
             if np.random.randint(2):
                 print_time("Performing horizontal flip", end=" ")
-                flip_horizontal([dataset], cluster_radius, tile_layers, tile_side)
+                flip_horizontal(dataset, cluster_radius, tile_layers, tile_side)
                 print_time("Done")
         rslt.append(dataset)
 
@@ -205,47 +195,53 @@ def extend_img_to_clusters(datasets_img,radius, width): #  = 324):
             rec['target_disparity'] = add_neibs(add_margins(rec['target_disparity'].reshape((height,width,-1)), radius, np.nan), radius).reshape((num_tiles,-1)) 
             rec['gt_ds'] =            add_neibs(add_margins(rec['gt_ds'].reshape((height,width,-1)), radius, np.nan), radius).reshape((num_tiles,-1))
             pass
-
-def reformat_to_clusters(datasets_data, cluster_radius):
+def reformat_to_clusters_rec(datasets_data, cluster_radius):
     cluster_size = (2 * cluster_radius + 1) * (2 * cluster_radius + 1)
 # Reformat input data
     for rec in datasets_data:
         rec['corr2d'] =           rec['corr2d'].reshape(          (rec['corr2d'].shape[0]//cluster_size,           rec['corr2d'].shape[1] * cluster_size)) 
         rec['target_disparity'] = rec['target_disparity'].reshape((rec['target_disparity'].shape[0]//cluster_size, rec['target_disparity'].shape[1] * cluster_size)) 
         rec['gt_ds'] =            rec['gt_ds'].reshape(           (rec['gt_ds'].shape[0]//cluster_size,            rec['gt_ds'].shape[1] * cluster_size))
+def reformat_to_clusters(corr2d, target_disparity, gt_ds, cluster_radius):
+    cluster_size = (2 * cluster_radius + 1) * (2 * cluster_radius + 1)
+# Reformat input data
+    corr2d.shape =           ((corr2d.shape[0]//cluster_size,           corr2d.shape[1] * cluster_size)) 
+    target_disparity.shape = ((target_disparity.shape[0]//cluster_size, target_disparity.shape[1] * cluster_size)) 
+    gt_ds.shape =            ((gt_ds.shape[0]//cluster_size,            gt_ds.shape[1] * cluster_size))
 
-def flip_horizontal(datasets_data, cluster_radius, tile_layers, tile_side):
+def get_lengths(cluster_radius, tile_layers, tile_side):
     cluster_side = 2 * cluster_radius + 1
-#    cluster_size = cluster_side * cluster_side
+    cl = cluster_side * cluster_side * tile_layers * tile_side * tile_side
+    tl = cluster_side * cluster_side
+    return  cl, tl,cluster_side
+
+
+def flip_horizontal(dataset, cluster_radius, tile_layers, tile_side):
+    cl,tl,cluster_side = get_lengths(cluster_radius, tile_layers, tile_side) 
+    corr2d =           dataset[:,:cl]     .reshape([dataset.shape[0],  cluster_side, cluster_side, tile_layers, tile_side, tile_side])
+    target_disparity = dataset[:,cl:cl+tl].reshape([dataset.shape[0],  cluster_side, cluster_side, -1])
+    gt_ds =            dataset[:,cl+tl:]  .reshape([dataset.shape[0],  cluster_side, cluster_side, -1])
+
     """
-TILE_LAYERS =        4
-TILE_SIDE =          9 # 7
-TILE_SIZE =         TILE_SIDE* TILE_SIDE # == 81
+    Horizontal flip of tiles
     """
-    for rec in datasets_data:
-        corr2d =           rec['corr2d'].reshape(          (rec['corr2d'].shape[0],  cluster_side, cluster_side, tile_layers, tile_side, tile_side))
-        target_disparity = rec['target_disparity'].reshape((rec['corr2d'].shape[0],  cluster_side, cluster_side, -1))
-        gt_ds =            rec['gt_ds'].reshape(           (rec['corr2d'].shape[0],  cluster_side, cluster_side, -1))
-        """
-        Horizontal flip of tiles
-        """
-        corr2d = corr2d[:,:,::-1,...]
-        target_disparity = target_disparity[:,:,::-1,...]
-        gt_ds = gt_ds[:,:,::-1,...]
-        
-        corr2d[:,:,:,0,:,:] = corr2d[:,:,:,0,::-1,:] # flip vertical layer0   (hor) 
-        corr2d[:,:,:,1,:,:] = corr2d[:,:,:,1,:,::-1]  # flip horizontal layer1 (vert)
-        corr2d_2 =            corr2d[:,:,:,3,::-1,:].copy() # flip vertical layer3   (diago)
-        corr2d[:,:,:,3,:,:] = corr2d[:,:,:,2,::-1,:] # flip vertical layer2   (diago)
-        corr2d[:,:,:,2,:,:] = corr2d_2
-        
-        
-        rec['corr2d'] =           corr2d.reshape((corr2d.shape[0],-1)) 
-        rec['target_disparity'] = target_disparity.reshape((target_disparity.shape[0],-1)) 
-        rec['gt_ds'] =            gt_ds.reshape((gt_ds.shape[0],-1))
+    corr2d = corr2d[:,:,::-1,...]
+    target_disparity = target_disparity[:,:,::-1,...]
+    gt_ds = gt_ds[:,:,::-1,...]
+    
+    corr2d[:,:,:,0,:,:] = corr2d[:,:,:,0,::-1,:] # flip vertical layer0   (hor) 
+    corr2d[:,:,:,1,:,:] = corr2d[:,:,:,1,:,::-1]  # flip horizontal layer1 (vert)
+    corr2d_2 =            corr2d[:,:,:,3,::-1,:].copy() # flip vertical layer3   (diago)
+    corr2d[:,:,:,3,:,:] = corr2d[:,:,:,2,::-1,:] # flip vertical layer2   (diago)
+    corr2d[:,:,:,2,:,:] = corr2d_2
+    """
+    pack back into a single (input)array
+    """
+    dataset[:,:cl] =      corr2d.reshape((corr2d.shape[0],-1))
+    dataset[:,cl:cl+tl] = target_disparity.reshape((target_disparity.shape[0],-1)) 
+    dataset[:,cl+tl:] =   gt_ds.reshape((gt_ds.shape[0],-1))
 
 def replace_nan(datasets_data): # , cluster_radius):
-#    cluster_size = (2 * cluster_radius + 1) * (2 * cluster_radius + 1)
 # Reformat input data
     for rec in datasets_data:
         if not rec is None:
@@ -263,185 +259,112 @@ def permute_to_swaps(perm):
             perm[i] = i
     return pairs        
         
-def shuffle_in_place(datasets_data, indx, period):
-    swaps = permute_to_swaps(np.random.permutation(len(datasets_data)))
-#    num_entries = datasets_data[0]['corr2d'].shape[0] // period
-    for swp in swaps:
-        ds0 = datasets_data[swp[0]]
-        ds1 = datasets_data[swp[1]]
-        tmp = ds0['corr2d'][indx::period].copy() 
-        ds0['corr2d'][indx::period] = ds1['corr2d'][indx::period]
-        ds1['corr2d'][indx::period] = tmp
 
-        tmp = ds0['target_disparity'][indx::period].copy() 
-        ds0['target_disparity'][indx::period] = ds1['target_disparity'][indx::period]
-        ds1['target_disparity'][indx::period] = tmp
+def shuffle_in_place(dataset_data, #alternating clusters from 4 sources.each cluster has all needed data (concatenated)
+                      period):
+    for i in range (period):
+        np.random.shuffle(dataset_data[i::period]) 
 
-        tmp = ds0['gt_ds'][indx::period].copy() 
-        ds0['gt_ds'][indx::period] = ds1['gt_ds'][indx::period]
-        ds1['gt_ds'][indx::period] = tmp
-    
-def shuffle_chunks_in_place(datasets_data, tiles_groups_per_chunk):
-    """
-    Improve shuffling by preserving indices inside batches (0 <->0, ... 39 <->39 for 40 tile group batches)
-    """
-#    num_files = len(datasets_data)
-    #chunks_per_file = datasets_data[0]['target_disparity']
-#    for nf, ds in enumerate(datasets_data):
-    for ds in datasets_data:
-        groups_per_file = ds['corr2d'].shape[0]
-        chunks_per_file = groups_per_file//tiles_groups_per_chunk
-        permut = np.random.permutation(chunks_per_file)
-        ds['corr2d'] =           ds['corr2d'].          reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
-        ds['target_disparity'] = ds['target_disparity'].reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
-        ds['gt_ds'] =            ds['gt_ds'].           reshape((chunks_per_file,-1))[permut].reshape((groups_per_file,-1))
-
-def _setFileSlot(train_next, files, max_files_per_group):
-    train_next['files'] = files
-    train_next['slots'] = min(train_next['files'], max_files_per_group)
-     
-def _nextFileSlot(train_next):
-    train_next['file'] = (train_next['file'] + 1) % train_next['files'] 
-    train_next['slot'] = (train_next['slot'] + 1) % train_next['slots'] 
-
-    
-def replaceNextDataset(datasets_data, new_dataset, train_next, nset,period):
-    replaceDataset(datasets_data, new_dataset, nset, period, findx = train_next['slot'])
-#    _nextFileSlot(train_next[nset])
-
+def add_file_to_dataset(dataset, new_dataset, train_next):
+    l = new_dataset.shape[0] * train_next['step']
+    rollover = False
+    if (train_next['entry'] + l) < (train_next['entries']+train_next['step']):
+        dataset[train_next['entry']:train_next['entry']+l:train_next['step']] = new_dataset
+    else: # split it two parts
+        rollover = True
+        l = (train_next['entries'] - train_next['entry']) // train_next['step']
+        dataset[train_next['entry']::train_next['step']] = new_dataset[:l]
         
-def replaceDataset(datasets_data, new_dataset, nset, period, findx):
-    """
-    Replace one file in the dataset
-    """
-    datasets_data[findx]['corr2d']          [nset::period] =  new_dataset['corr2d'] 
-    datasets_data[findx]['target_disparity'][nset::period] =  new_dataset['target_disparity'] 
-    datasets_data[findx]['gt_ds']           [nset::period] =  new_dataset['gt_ds'] 
-    
+        train_next['entry'] = (train_next['entry'] + l * train_next['step']) % train_next['entries']
+        
+        l1 = new_dataset.shape[0] - l # remainder
+        ln = train_next['entry'] + l1 * train_next['step']
+        dataset[train_next['entry']:ln:train_next['step']] = new_dataset[l:]
+    train_next['entry'] += new_dataset.shape[0] * train_next['step']
+    train_next['file'] = (train_next['file']+1)%train_next['files'] 
+    if (train_next['entry'] >= train_next['entries']):
+        train_next['entry'] -= train_next['entries']
+        return True
+    return rollover
 
-def zip_lvar_hvar(datasets_all_data, del_src = True):
-#    cluster_size = (2 * CLUSTER_RADIUS + 1) * (2 * CLUSTER_RADIUS + 1)
-# Reformat input data
-    num_sets_to_combine = len(datasets_all_data)
-    datasets_data = []
-    if num_sets_to_combine:
-        for nrec in range(len(datasets_all_data[0])):
-            recs = [[] for _ in range(num_sets_to_combine)]
-            for nset, datasets in enumerate(datasets_all_data):
-                recs[nset] = datasets[nrec]
-                
-            rec = {'corr2d':           np.empty((recs[0]['corr2d'].shape[0]*num_sets_to_combine,          recs[0]['corr2d'].shape[1]),dtype=np.float32),
-                   'target_disparity': np.empty((recs[0]['target_disparity'].shape[0]*num_sets_to_combine,recs[0]['target_disparity'].shape[1]),dtype=np.float32),
-                   'gt_ds':            np.empty((recs[0]['gt_ds'].shape[0]*num_sets_to_combine,           recs[0]['gt_ds'].shape[1]),dtype=np.float32)}
-            
-#            for nset, reci in enumerate(recs):
-            for nset, _ in enumerate(recs):
-                rec['corr2d']          [nset::num_sets_to_combine] =  recs[nset]['corr2d'] 
-                rec['target_disparity'][nset::num_sets_to_combine] =  recs[nset]['target_disparity'] 
-                rec['gt_ds']           [nset::num_sets_to_combine] =  recs[nset]['gt_ds'] 
-            if del_src:
-                for nset in range(num_sets_to_combine):
-                    datasets_all_data[nset][nrec] = None
-            datasets_data.append(rec)
-    return datasets_data    
-         
+"""
+train_next[n_train]
+Read as many files as needed, possibly repeating, until each buffer is f
+"""    
 
-# list of dictionaries  
-def reduce_tile_size(datasets_data, num_tile_layers, reduced_tile_side):
-    if (not datasets_data is None) and (len (datasets_data) > 0): 
-        tsz = (datasets_data[0]['corr2d'].shape[1])// num_tile_layers # 81 # list index out of range
-        tss = int(np.sqrt(tsz)+0.5)
-        offs = (tss - reduced_tile_side) // 2
-        for rec in datasets_data:
-            rec['corr2d'] =  (rec['corr2d'].reshape((-1, num_tile_layers,  tss, tss))
-                                 [..., offs:offs+reduced_tile_side, offs:offs+reduced_tile_side].
-                                 reshape(-1,num_tile_layers*reduced_tile_side*reduced_tile_side))
-            
-            
 def initTrainTestData(
         files,
         cluster_radius,
-        max_files_per_group, # shuffling buffer for files
-        two_trains,
-        train_next):
-#    datasets_train_lvar =  []
-#    datasets_train_hvar =  []
-#    datasets_train_lvar1 = []
-#    datasets_train_hvar1 = []
-    datasets_train_all = [[],[],[],[]]
+        buffer_size, # number of clusters per train
+        ):
+    """
+    Generates a single np array for training with concatenated cluster of corr2d,
+    cluster of target_disparity, and cluster of gt_ds for convenient shuffling                  
+    
+    """
+    num_trains = len(files['train'])
+    num_entries = num_trains * buffer_size  
+#    dataset_train_all = None
+    dataset_train_merged = None
+    train_next = [None]*num_trains
     for n_train, f_train in enumerate(files['train']):
-        if len(f_train) and ((n_train<2) or two_trains):
-            _setFileSlot(train_next[n_train], len(f_train), max_files_per_group)
-            for i, fpath in enumerate(f_train):
-                if i >= max_files_per_group:
-                    break
+        train_next[n_train] = {'file':0, 'entry':n_train, 'files':len(f_train), 'entries': num_entries, 'step':num_trains, 'more_files':False}
+        buffer_full = False
+        while not buffer_full:
+            for fpath in f_train:
                 print_time("Importing train data "+(["low variance","high variance", "low variance1","high variance1"][n_train]) +" from "+fpath, end="")
-                corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-                datasets_train_all[n_train].append({"corr2d":corr2d,
-                                            "target_disparity":target_disparity,
-                                            "gt_ds":gt_ds})
-                _nextFileSlot(train_next[n_train])
+                new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+                if dataset_train_merged is None:
+                    dataset_train_merged = np.empty([num_entries,new_dataset.shape[1]], dtype =new_dataset.dtype)
+                rollover = add_file_to_dataset(
+                    dataset = dataset_train_merged,
+                    new_dataset = new_dataset,
+                    train_next = train_next[n_train])
                 print_time("  Done")
+                if rollover:
+                    buffer_full = True
+                    train_next[n_train][ 'more_files'] = train_next[n_train][ 'file'] < train_next[n_train][ 'files'] # Not all files used, need to load during training
+                    break
     
     datasets_test_lvar = []
     for fpath in files['test_lvar']:
         print_time("Importing test data (low variance) from "+fpath, end="")
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-        datasets_test_lvar.append({"corr2d":corr2d,
-                                    "target_disparity":target_disparity,
-                                    "gt_ds":gt_ds})
+        new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+        datasets_test_lvar.append(new_dataset)
         print_time("  Done")
     datasets_test_hvar = []
     for fpath in files['test_hvar']:
         print_time("Importing test data (high variance) from "+fpath, end="")
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(fpath)
-        datasets_test_hvar.append({"corr2d":corr2d,
-                                    "target_disparity":target_disparity,
-                                    "gt_ds":gt_ds})
+        new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+        datasets_test_hvar.append(new_dataset)
         print_time("  Done")
         
-    # Reformat to 1/9/25 tile clusters
-    for n_train, d_train in enumerate(datasets_train_all):
-        print_time("Reshaping train data ("+(["low variance","high variance", "low variance1","high variance1"][n_train])+") ", end="")
-        reformat_to_clusters(d_train, cluster_radius)
-        print_time("  Done")
-    
-    print_time("Reshaping test data (low variance)", end="")
-    reformat_to_clusters(datasets_test_lvar, cluster_radius)
-    print_time("  Done")
-    print_time("Reshaping test data (high variance)", end="")
-    reformat_to_clusters(datasets_test_hvar, cluster_radius)
-    print_time("  Done")
-    pass    
-    
     """
     datasets_train_lvar & datasets_train_hvar ( that will increase batch size and placeholders twice
     test has to have even original, batches will not zip - just use two batches for one big one
     """
-    print_time("Zipping together datasets datasets_train_lvar and datasets_train_hvar", end="")
-    datasets_train = zip_lvar_hvar(datasets_train_all, del_src = True) # no shuffle, delete src
-    print_time("  Done")
-    
     datasets_test = []
     for dataset_test_lvar in datasets_test_lvar:
         datasets_test.append(dataset_test_lvar)
     for dataset_test_hvar in datasets_test_hvar:
         datasets_test.append(dataset_test_hvar)
     
-    return datasets_train, datasets_test, len(datasets_train_all) # 4
-    
-                
-                
-                
-    
+    return train_next, dataset_train_merged, datasets_test
+        
 def readImageData(image_data,
                   files,
                   indx,
                   cluster_radius,
+                  tile_layers,
+                  tile_side,
                   width,
                   replace_nans):
+    cl,tl,_ = get_lengths(0, tile_layers, tile_side) 
     if image_data[indx] is None:
-        corr2d, target_disparity, gt_ds = readTFRewcordsEpoch(files['images'][indx])
+        dataset = readTFRewcordsEpoch(files['images'][indx], cluster_radius = 0)
+        corr2d =           dataset[:,:cl]
+        target_disparity = dataset[:,cl:cl+tl]
+        gt_ds =            dataset[:,cl+tl:]
         image_data[indx] = {
             'corr2d':           corr2d,
             'target_disparity': target_disparity,
@@ -453,23 +376,31 @@ def readImageData(image_data,
              cluster_radius,
              width)
         if replace_nans:
-#            replace_nan([image_data[indx]], cluster_radius)
             replace_nan([image_data[indx]])
             
     return image_data[indx]
-               
+
 def initImageData(files,
                   max_imgs,
                   cluster_radius,
+                  tile_layers,
+                  tile_side,
                   width,
                   replace_nans):
     num_imgs = len(files['images'])
     img_data = [None] * num_imgs
     for nfile in range(min(num_imgs, max_imgs)):
         print_time("Importing test image data from "+ files['images'][nfile], end="")
-        readImageData(img_data,files, nfile, cluster_radius, width, replace_nans)
+        readImageData(img_data,
+                      files,
+                      nfile,
+                      cluster_radius,
+                      tile_layers,
+                      tile_side,
+                      width,
+                      replace_nans)
         print_time("  Done")
-        return img_data    
+        return img_data
             
 def evaluateAllResults(result_files, absolute_disparity, cluster_radius):
     for result_file in result_files:
