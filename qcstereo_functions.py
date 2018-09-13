@@ -29,12 +29,23 @@ def print_time(txt="",end="\n"):
         txt +=" "
     print(("%s"+bcolors.BOLDWHITE+"at %.4fs (+%.4fs)"+bcolors.ENDC)%(txt,t-TIME_START,t-TIME_LAST), end = end, flush=True)
     TIME_LAST = t
+
+DEFAULT_TITLES = [
+        ['test_lvar','Test_flat_heuristic'],
+        ['test_hvar','Test_edge_heuristic'],
+        ['test_lvar1','Test_flat_random'],
+        ['test_hvar1','Test_edge_random'],
+        ['fake_lvar','Fake_flat_heuristic'],
+        ['fake_hvar','Fake_edge_heuristic'],
+        ['fake_lvar1','Fake_flat_random'],
+        ['fake_hvar1','Fake_edge_random']]
     
 def parseXmlConfig(conf_file, root_dir):
     tree = ET.parse(conf_file)
     root = tree.getroot()
     parameters = {}
     for p in root.find('parameters'):
+##        print ("p.tag=%s,  p.text.stri[p()=%s"%(p.tag,p.text.strip()))
         parameters[p.tag]=eval(p.text.strip())
 #    globals    
     dirs={}
@@ -51,6 +62,14 @@ def parseXmlConfig(conf_file, root_dir):
 
     return parameters, dirs, files, dbg_parameters
 
+def defaultTestTitles(files):
+    test_titles = []
+    for f, n in DEFAULT_TITLES:
+        if f in files:
+            test_titles.append(n)
+        else:
+            test_titles.append(None)
+    return test_titles
 
 
 def prepareFiles(dirs, files, suffix):
@@ -72,11 +91,47 @@ def prepareFiles(dirs, files, suffix):
         
     for i, path in enumerate(files['test_hvar']):
         files['test_hvar'][i]=os.path.join(dirs['test_hvar'], path)
+    if ('test_lvar1' in files) and ('test_lvar1' in dirs):
+        for i, path in enumerate(files['test_lvar1']):
+            files['test_lvar1'][i]=os.path.join(dirs['test_lvar1'], path)
+    if ('test_hvar1' in files) and ('test_hvar1' in dirs):
+        for i, path in enumerate(files['test_hvar1']):
+            files['test_hvar1'][i]=os.path.join(dirs['test_hvar1'], path)
+
+    if ('fake_lvar' in files) and ('fake_lvar' in dirs):
+        for i, path in enumerate(files['fake_lvar']):
+            files['fake_lvar'][i]=os.path.join(dirs['fake_lvar'], path)
+    if ('fake_hvar' in files) and ('fake_hvar' in dirs):
+        for i, path in enumerate(files['fake_hvar']):
+            files['fake_hvar'][i]=os.path.join(dirs['fake_hvar'], path)
+
+    if ('fake_lvar1' in files) and ('fake_lvar1' in dirs):
+        for i, path in enumerate(files['fake_lvar1']):
+            files['fake_lvar1'][i]=os.path.join(dirs['fake_lvar1'], path)
+    if ('fake_hvar' in files) and ('fake_hvar' in dirs):
+        for i, path in enumerate(files['fake_hvar1']):
+            files['fake_hvar1'][i]=os.path.join(dirs['fake_hvar1'], path)
+
+         
+        
     result_files=[]
     for i, path in enumerate(files['images']):
         result_files.append(os.path.join(dirs['result'], path+"_"+suffix+'.npy'))
-    files['result'] = result_files 
+    files['result'] = result_files
+    if not 'checkpoints' in files:
+        files['checkpoints'] = 'checkpoints'
+    if not 'checkpoints' in dirs:
+        dirs['checkpoints'] = dirs['result']
+    files['checkpoints'] = os.path.join(dirs['checkpoints'], files['checkpoints'])    
+    if not 'figures' in dirs:
+        dirs['figures'] = os.path.join(dirs['result'],"figs")
+     
     files['train'] = [files['train_lvar'],files['train_hvar'], files['train_lvar1'], files['train_hvar1']]
+    files['test'] =  [files['test_lvar'], files['test_hvar']]
+    if 'test_lvar1' in files:
+        files['test'].append(files['test_lvar1'])
+    if 'test_hvar1' in files:
+        files['test'].append(files['test_hvar1'])
     # should be after result files
     for i, path in enumerate(files['images']):
         files['images'][i] =      os.path.join(dirs['images'],    path+'.tfrecords')
@@ -237,8 +292,9 @@ def replace_nan(datasets_data): # , cluster_radius):
     for rec in datasets_data:
         if not rec is None:
             np.nan_to_num(rec['corr2d'],           copy = False) 
-            np.nan_to_num(rec['target_disparity'], copy = False) 
-            np.nan_to_num(rec['gt_ds'],            copy = False)
+            np.nan_to_num(rec['target_disparity'], copy = False)
+            if  'gt_ds' in rec:
+                np.nan_to_num(rec['gt_ds'],        copy = False)
 
 def permute_to_swaps(perm):
     pairs = []
@@ -257,26 +313,27 @@ def shuffle_in_place(dataset_data, #alternating clusters from 4 sources.each clu
         np.random.shuffle(dataset_data[i::period]) 
 
 def add_file_to_dataset(dataset, new_dataset, train_next):
+    train_next['file'] = (train_next['file']+1)%train_next['files'] 
     l = new_dataset.shape[0] * train_next['step']
-    rollover = False
     if (train_next['entry'] + l) < (train_next['entries']+train_next['step']):
         dataset[train_next['entry']:train_next['entry']+l:train_next['step']] = new_dataset
+        train_next['entry'] += l
+        if (train_next['entry'] >= train_next['entries']):
+            train_next['entry'] -= train_next['entries']
+            return True
+        else:
+            return False
     else: # split it two parts
-        rollover = True
-        l = (train_next['entries'] - train_next['entry']) // train_next['step']
+        l = (train_next['entries'] - train_next['entry'] + (train_next['step']-1)) // train_next['step']
         dataset[train_next['entry']::train_next['step']] = new_dataset[:l]
         
-        train_next['entry'] = (train_next['entry'] + l * train_next['step']) % train_next['entries']
+        train_next['entry'] = (train_next['entry'] + l * train_next['step']) % train_next['entries'] #0,1,2,3
         
         l1 = new_dataset.shape[0] - l # remainder
         ln = train_next['entry'] + l1 * train_next['step']
         dataset[train_next['entry']:ln:train_next['step']] = new_dataset[l:]
-    train_next['entry'] += new_dataset.shape[0] * train_next['step']
-    train_next['file'] = (train_next['file']+1)%train_next['files'] 
-    if (train_next['entry'] >= train_next['entries']):
-        train_next['entry'] -= train_next['entries']
+        train_next['entry'] = ln 
         return True
-    return rollover
 
 """
 train_next[n_train]
@@ -287,6 +344,7 @@ def initTrainTestData(
         files,
         cluster_radius,
         buffer_size, # number of clusters per train
+        test_titles = None
         ):
     """
     Generates a single np array for training with concatenated cluster of corr2d,
@@ -306,41 +364,47 @@ def initTrainTestData(
                 new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
                 if dataset_train_merged is None:
                     dataset_train_merged = np.empty([num_entries,new_dataset.shape[1]], dtype =new_dataset.dtype)
+##                print("\nbefore add_file_to_dataset: train_next["+str(n_train)+"]=",train_next[n_train])
                 rollover = add_file_to_dataset(
                     dataset = dataset_train_merged,
                     new_dataset = new_dataset,
                     train_next = train_next[n_train])
+##                print("after add_file_to_dataset: train_next["+str(n_train)+"]=",train_next[n_train])
                 print_time("  Done")
                 if rollover:
                     buffer_full = True
                     train_next[n_train][ 'more_files'] = train_next[n_train][ 'file'] < train_next[n_train][ 'files'] # Not all files used, need to load during training
                     break
-    
-    datasets_test_lvar = []
-    for fpath in files['test_lvar']:
-        print_time("Importing test data (low variance) from "+fpath, end="")
-        new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
-        datasets_test_lvar.append(new_dataset)
-        print_time("  Done")
-    datasets_test_hvar = []
-    for fpath in files['test_hvar']:
-        print_time("Importing test data (high variance) from "+fpath, end="")
-        new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
-        datasets_test_hvar.append(new_dataset)
-        print_time("  Done")
-        
-    """
-    datasets_train_lvar & datasets_train_hvar ( that will increase batch size and placeholders twice
-    test has to have even original, batches will not zip - just use two batches for one big one
-    """
+    if test_titles is None:
+        test_titles = defaultTestTitles(files)
     datasets_test = []
-    for dataset_test_lvar in datasets_test_lvar:
-        datasets_test.append(dataset_test_lvar)
-    for dataset_test_hvar in datasets_test_hvar:
-        datasets_test.append(dataset_test_hvar)
-    
+    for t,v in zip(test_titles,DEFAULT_TITLES):
+        if not t is None:
+            grp = v[0]
+            for fpath in files[grp]:
+                print_time("Importing test data ("+grp+") from "+fpath, end="")
+                new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+                datasets_test.append(new_dataset)
+                print_time("  Done")
+    """
+    for grp in ['test_lvar','test_hvar','test_lvar1','test_hvar1']:
+        if grp in files:
+            for fpath in files[grp]:
+                print_time("Importing test data ("+grp+") from "+fpath, end="")
+                new_dataset = readTFRewcordsEpoch(fpath, cluster_radius)
+                datasets_test.append(new_dataset)
+                print_time("  Done")
+    """
     return train_next, dataset_train_merged, datasets_test
         
+def get_full_tile_indices2d(height,width):
+    a = np.empty([height,width,2], dtype=np.int32)
+    a[...,0] = np.arange(height).reshape([height,1])
+    a[...,1] = np.arange(width)
+    return a.reshape(-1,2)
+def get_full_tile_indices(height,width):
+    return np.arange(height*width).reshape(-1,1)
+
 def readImageData(image_data,
                   files,
                   indx,
@@ -348,23 +412,38 @@ def readImageData(image_data,
                   tile_layers,
                   tile_side,
                   width,
-                  replace_nans):
+                  replace_nans,
+                  infer =          False,
+                  keep_gt =        False):
     cl,tl,_ = get_lengths(0, tile_layers, tile_side) 
     if image_data[indx] is None:
         dataset = readTFRewcordsEpoch(files['images'][indx], cluster_radius = 0)
         corr2d =           dataset[:,:cl]
         target_disparity = dataset[:,cl:cl+tl]
-        gt_ds =            dataset[:,cl+tl:]
-        image_data[indx] = {
-            'corr2d':           corr2d,
-            'target_disparity': target_disparity,
-             "gt_ds":            gt_ds,
-             "gtruths":          gt_ds.copy(),
-             "t_disps":          target_disparity.reshape([-1,1]).copy()}
-        extend_img_to_clusters(
-             [image_data[indx]],
-             cluster_radius,
-             width)
+        if infer:
+            image_data[indx] = {
+                'corr2d':           corr2d,
+                'target_disparity': target_disparity,
+                'xy':get_full_tile_indices2d(corr2d.shape[0]//width, width),
+                'ntile':get_full_tile_indices(corr2d.shape[0]//width, width)}
+            if keep_gt:
+                gt_ds =                      dataset[:,cl+tl:]
+                image_data[indx]["gt_ds"] =  gt_ds
+                image_data[indx]["gtruths"]= gt_ds.copy()
+                image_data[indx]["t_disps"]= target_disparity.reshape([-1,1]).copy()
+        else:
+            gt_ds =            dataset[:,cl+tl:]
+            image_data[indx] = {
+                'corr2d':           corr2d,
+                'target_disparity': target_disparity,
+                 "gt_ds":            gt_ds,
+                 "gtruths":          gt_ds.copy(),
+                 "t_disps":          target_disparity.reshape([-1,1]).copy()}
+            if cluster_radius > 0:
+                extend_img_to_clusters(
+                     [image_data[indx]],
+                     cluster_radius,
+                     width)
         if replace_nans:
             replace_nan([image_data[indx]])
             
@@ -376,7 +455,10 @@ def initImageData(files,
                   tile_layers,
                   tile_side,
                   width,
-                  replace_nans):
+                  replace_nans,
+                  infer =          False,
+                  keep_gt =        False):
+#                  no_train = False):
     num_imgs = len(files['images'])
     img_data = [None] * num_imgs
     for nfile in range(min(num_imgs, max_imgs)):
@@ -388,15 +470,21 @@ def initImageData(files,
                       tile_layers,
                       tile_side,
                       width,
-                      replace_nans)
+                      replace_nans,
+                      infer =     infer,
+                      keep_gt =   keep_gt)
         print_time("  Done")
         return img_data
             
-def evaluateAllResults(result_files, absolute_disparity, cluster_radius, labels=None):
+def evaluateAllResults(result_files, absolute_disparity, cluster_radius, labels=None, logpath=None):
+    if logpath:
+        lf=open(logpath,"w")
+    else:
+        lf = None
     for result_file in result_files:
         try:
             print_time("Reading resuts from "+result_file, end=" ")
-            eval_results(result_file, absolute_disparity, radius=cluster_radius)
+            eval_results(result_file, absolute_disparity, radius=cluster_radius, logfile=lf)
         except:
             print_time(" - does not exist")
             continue
@@ -404,7 +492,8 @@ def evaluateAllResults(result_files, absolute_disparity, cluster_radius, labels=
         print_time("Saving resuts to tiff", end=" ")
         result_npy_to_tiff(result_file, absolute_disparity, fix_nan = True, labels=labels)        
         print_time("Done")
-    
+    if lf:
+        lf.close()
 
 
 def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=None):
@@ -417,7 +506,7 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=No
     """
     data = np.load(npy_path) #(324,242,4) [nn_disp, target_disp,gt_disp, gt_conf]
     if labels is None:
-        labels = ["chn%d"%(i) for i in range(data.shape[0])]
+        labels = ["chn%d"%(i) for i in range(data.shape[2])]
 #    labels = ["nn_out","hier_out","gt_disparity","gt_strength"]
     nn_out =            0
 #    target_disparity =  1     
@@ -430,12 +519,13 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=No
             data[...,nn_out] +=  data[...,1]
     if insert_deltas:
         np.nan_to_num(data[...,gt_strength], copy=False)
-        data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2)
+        data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2) # data[...,4:] may be empty
         labels = labels[:4]+["nn_out","hier_out","nn_err","hier_err"]+labels[4:]
         data[...,6] -= data[...,gt_disparity] 
         data[...,7] -= data[...,gt_disparity]
         for l in [2, 4, 5, 6, 7]:
-            data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
+            if l < data.shape[2]:
+                data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
         # All other layers - mast too
         for l in range(8,data.shape[2]):
             data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
@@ -445,7 +535,8 @@ def result_npy_to_tiff(npy_path,
                         absolute,
                         fix_nan,
                         insert_deltas=True,
-                        labels =      None):
+                        labels =      None,
+                        logfile =     None):
     
     """
     @param npy_path full path to the npy file with 4-layer data (242,324,4) - nn_disparity(offset), target_disparity, gt disparity, gt strength
@@ -458,6 +549,9 @@ def result_npy_to_tiff(npy_path,
             
     data = data.transpose(2,0,1)
     print("Saving results to TIFF: "+tiff_path)
+    if (logfile):
+        print("Saving results to TIFF: "+tiff_path,file=logfile)
+        
     imagej_tiffwriter.save(tiff_path,data,labels=labels)        
 
 def eval_results(rslt_path, absolute,
@@ -466,7 +560,8 @@ def eval_results(rslt_path, absolute,
                  max_ofst_target = 1.0,
                  max_ofst_result = 1.0,
                  str_pow =         2.0,
-                 radius =          0):
+                 radius =          0,
+                 logfile = None):
     variants = [[         -0.1,         5.0,              0.5,            0.5,          1.0],           
                 [         -0.1,         5.0,              0.5,            0.5,          2.0],
                 [         -0.1,         5.0,              0.2,            0.2,          1.0],
@@ -498,6 +593,10 @@ def eval_results(rslt_path, absolute,
     gt_disparity =     np.nan_to_num(rslt[...,2], copy = False)
     gt_strength =      np.nan_to_num(rslt[...,3], copy = False)
     rslt = []
+    print ("--------------- %s ---------------"%(rslt_path))
+    if logfile:
+        print ("--------------- %s ---------------"%(rslt_path), file=logfile)
+
     for min_disparity, max_disparity, max_offset_target, max_offset_result, strength_pow in variants:
         good_tiles = not_nan.copy();
         good_tiles &= (gt_disparity >= min_disparity)
@@ -516,6 +615,10 @@ def eval_results(rslt_path, absolute,
         rms1 = np.sqrt(diff1_2w.sum()/sw)
         print ("%7.3f<disp<%7.3f, offs_tgt<%5.2f, offs_rslt<%5.2f pwr=%05.3f, rms0=%7.4f, rms1=%7.4f (gain=%7.4f) num good tiles = %5d"%(
             min_disparity, max_disparity, max_offset_target,  max_offset_result, strength_pow, rms0, rms1, rms0/rms1, good_tiles.sum() ))
+        if logfile:
+            print ("%7.3f<disp<%7.3f, offs_tgt<%5.2f, offs_rslt<%5.2f pwr=%05.3f, rms0=%7.4f, rms1=%7.4f (gain=%7.4f) num good tiles = %5d"%(
+                min_disparity, max_disparity, max_offset_target,  max_offset_result, strength_pow, rms0, rms1, rms0/rms1, good_tiles.sum() ),file=logfile)
+            
         rslt.append([rms0,rms1])
     return rslt 
 

@@ -2,7 +2,7 @@
 <properties>
     <parameters>
         <EPOCHS_TO_RUN>        650 </EPOCHS_TO_RUN> <!-- 752# 3000#0 #0 -->
-        <NET_ARCH1>              1 </NET_ARCH1> <!--1-st stage network  -->
+        <NET_ARCH1>             13 </NET_ARCH1> <!--1-st stage network  -->
         <NET_ARCH2>              9 </NET_ARCH2> <!-- 2-nd stage network -->
         <SYM8_SUB>           False </SYM8_SUB>          <!-- enforce inputs from 2d correlation have symmetrical ones (groups of 8) -->
         <SPREAD_CONVERGENCE> False </SPREAD_CONVERGENCE><!-- Input target disparity to all nodes of the 1-st stage -->
@@ -22,7 +22,7 @@
         <ONLY_TILE>           None </ONLY_TILE>           <!--  (remove all but center tile data), put None here for normal operation) -->
         <CLUSTER_RADIUS>         2 </CLUSTER_RADIUS>      <!--  1 # 1 - 3x3, 2 - 5x5 tiles -->
         <SHUFFLE_FILES>       True </SHUFFLE_FILES>
-        <WLOSS_LAMBDA>         0.1 </WLOSS_LAMBDA>        <!-- fraction of the W_loss (input layers weight non-uniformity) added to G_loss -->
+        <WLOSS_LAMBDA>         0.5 </WLOSS_LAMBDA>        <!-- fraction of the W_loss (input layers weight non-uniformity) added to G_loss -->
         <SLOSS_LAMBDA>         0.1 </SLOSS_LAMBDA>        <!-- weight of loss for smooth fg/bg transitions -->
         <SLOSS_CLIP>           0.2 </SLOSS_CLIP>          <!-- limit punishment for cutting corners (disparity pix) -->
         <WBORDERS_ZERO>       True </WBORDERS_ZERO>       <!-- Border conditions for first layer weights: False - free, True - tied to 0 -->
@@ -32,117 +32,176 @@
         <PARTIALS_WEIGHTS>  [2.0,0.5,0.2] </PARTIALS_WEIGHTS><!-- weight of full 5x5, center 3x3 and center 1x1. len(PARTIALS_WEIGHTS) == CLUSTER_RADIUS + 1. Set to None -->
         <HOR_FLIP>            True </HOR_FLIP><!-- randomly flip training data horizontally -->
         <SAVE_TIFFS>          True </SAVE_TIFFS><!-- save Tiff files after each image evaluation -->
-        <BATCH_WEIGHTS> [0.9, 1.0, 0.9, 1.0]</BATCH_WEIGHTS> <!-- lvar, hvar, lvar1, hvar1 (increase importance of non-flat clusters -->
+        <BATCH_WEIGHTS> [0.9, 1.0, 0.1, 0.1]</BATCH_WEIGHTS> <!-- lvar, hvar, lvar1, hvar1 (increase importance of non-flat clusters -->
         <DISP_DIFF_CAP>       0.3  </DISP_DIFF_CAP><!-- cap disparity difference (do not increase loss above)-->
         <DISP_DIFF_SLOPE>     0.03 </DISP_DIFF_SLOPE><!-- allow squared error to grow above DISP_DIFF_CAP -->
         <TRAIN_BUFFER_GPU>      79 </TRAIN_BUFFER_GPU> <!-- in batches merged (now quad)  batches-->
         <TRAIN_BUFFER_CPU>       4 </TRAIN_BUFFER_CPU> <!-- in TRAIN_BUFFER_GPU-s -->
+        <!-- if TEST_TITLES is present, it should have 8 entries, use None to skip certain modes -->
+        <TEST_TITLES>["Test flat heuristic",
+                      "Test edge heuristic",
+                      "Test flat random",
+                      "Test edge random",
+                      "Fake flat heuristic",
+                      "Fake edge heuristic",
+                      "Fake flat random",
+                      "Fake edge random"]</TEST_TITLES>
+        <CHECKPOINT_PERIOD>100</CHECKPOINT_PERIOD>
+        <!--    <FIGS_ESXTENSIONS>["png","pdf","svg"]</FIGS_ESXTENSIONS> -->
+        <FIGS_EXTENSIONS>["pdf"]</FIGS_EXTENSIONS>
+        <!--        <FIGS_SAVESHOW>['save','show']</FIGS_SAVESHOW> -->
+        <FIGS_SAVESHOW>['save']</FIGS_SAVESHOW>
+        <EVAL_MODES>["train","infer"]</EVAL_MODES>
+        
         
     </parameters>
     <dbg_parameters>
         <disparity_ranges>
-            [[[0.0, 0.6,[140,230,135,60]],                                "Overlook"],
-             [[0.0, 1.0,[120,180,125,80]],[2.0, 4.0,   [50,130,125, 70]], "State Street1"],            
-             [[0.0, 1.0,[130,210,135,95]],[0.5, 2.5,   [50,150,150, 75]], "State Street2"],
-             [                            [1.0, 2.5,   [90,170, 50,  0]], "B737 near"],
-             [                            [0.75, 1.5, [125,150, 90, 70]], "B737 midrange"],
-             [                            [0.4,  0.8, [135,150,102,112]], "B737 far"]]
+            [[[0.0, 5.0,[0, 323,0,241]],                                   "City Creek 1"],
+             [[0.0, 4.0,[180,240, 90,140]],                                "City Creek 2"],
+             [[1.0, 2.0,[180,240, 90,140]],                                "City Creek 3"],
+             [[1.0, 1.5,[280,320, 70,120]],                                "City Creek 4"],
+             [[0.0, 0.5,[ 10,120, 60,120]],                                "City Creek 5"],
+             [[0.0, 2.0,[210,303, 70,130]],                                "City Creek 6"],
+             [[0.0, 3.0,[ 75,225, 50,140]],                                "State Capitol"],
+             [[0.0, 3.0,[170,225, 95,140]],                                "Stop Sign"],
+             [[0.0, 1.0,[ 75,135,100,135]],                                "SLC from Capitol Hill 1"],
+             [[0.0, 1.5,[ 90,190,125,170]],                                "SLC from Capitol Hill 2"],
+             [[0.0, 0.6,[ 95,210, 65,140]],                                "Overlook approach"],
+             [[0.0,10.0,[ 60,190, 95,145]],                                "North Salt Lake 1"],
+             [[0.0, 5.0,[120,230, 85,145]],                                "North Salt Lake 2"], <!-- bad pole -->
+             [[0.0, 2.0,[ 10,155, 90,150]],                                "North Salt Lake 3"], <!-- LPF? misaligned? -->
+             [[0.0, 0.6,[140,230,135,60]],                                 "Overlook"],
+             [[0.0, 1.0,[120,180,125,80]],[2.0, 4.0,   [50,130,125, 70]],  "State Street1"],
+             [[0.0, 1.0,[130,210,135,95]],[0.5, 2.5,   [50,150,150, 75]],  "State Street2"],
+             [                            [1.0, 2.5,   [90,170, 50,  0]],  "B737 near"],
+             [                            [0.75, 1.5, [125,150, 90, 70]],  "B737 midrange"],
+             [                            [0.4,  0.8, [135,150,102,112]],  "B737 far"]
+             ]
         </disparity_ranges>
     </dbg_parameters>
     <directories>
         <train_lvar>
-            "tf_data_5x5_main_1"
+            "tf_data_5x5_main_13_heur"
         </train_lvar>
         <train_hvar>
-            "tf_data_5x5_main_1"
+            "tf_data_5x5_main_13_heur"
         </train_hvar>
         <train_lvar1>
-            "tf_data_5x5_main_6"
+            "tf_data_5x5_main_11_rnd"
         </train_lvar1>
         <train_hvar1>
-            "tf_data_5x5_main_6"
+            "tf_data_5x5_main_11_rnd"
         </train_hvar1>
+        
         <test_lvar>
-            "tf_data_5x5_main_1"
+            "tf_data_5x5_main_10_heur" <!-- test file, no offset from hieuristic-->
         </test_lvar>
         <test_hvar>
-            "tf_data_5x5_main_5"
+            "tf_data_5x5_main_10_heur" <!-- test file, no offset from hieuristic-->
         </test_hvar>
+        <test_lvar1>
+            "tf_data_5x5_main_11_rnd" <!-- test file, random +/1 2pix offset-->
+        </test_lvar1>
+        <test_hvar1>
+            "tf_data_5x5_main_11_rnd" <!-- test file, random +/1 2pix offset-->
+        </test_hvar1>
+        <fake_lvar>
+            "tf_data_5x5_main_10_heur" <!-- test file, no offset from hieuristic-->
+        </fake_lvar>
+        <fake_hvar>
+            "tf_data_5x5_main_10_heur" <!-- test file, no offset from hieuristic-->
+        </fake_hvar>
+        <fake_lvar1>
+            "tf_data_5x5_main_11_rnd" <!-- test file, random +/1 2pix offset-->
+        </fake_lvar1>
+        <fake_hvar1>
+            "tf_data_5x5_main_11_rnd" <!-- test file, random +/1 2pix offset-->
+        </fake_hvar1>
+
         <images>
-            "tf_data_5x5_main_6/img"
+            "tf_data_5x5_main_13_heur/img"
         </images>
         <result>
-            "tf_data_5x5_main_6/result"
+            "tf_data_5x5_main_13_heur/result"
         </result>
+        <figures>
+            "tf_data_5x5_main_13_heur/result/figs"
+        </figures>
+        <checkpoints>
+            "tf_data_5x5_main_13_heur/checkpoints"
+        </checkpoints>
     </directories>
     <files>
         <train_lvar>
-            ["train000_R2_LE_1.5.tfrecords",
-            "train001_R2_LE_1.5.tfrecords",
-            "train002_R2_LE_1.5.tfrecords",
-            "train003_R2_LE_1.5.tfrecords",
-            "train004_R2_LE_1.5.tfrecords",
-            "train005_R2_LE_1.5.tfrecords",
-            "train006_R2_LE_1.5.tfrecords",
-            "train007_R2_LE_1.5.tfrecords",
-            "train008_R2_LE_1.5.tfrecords",
-            "train009_R2_LE_1.5.tfrecords",
-            "train010_R2_LE_1.5.tfrecords",
-            "train011_R2_LE_1.5.tfrecords",
-            "train012_R2_LE_1.5.tfrecords",
-            "train013_R2_LE_1.5.tfrecords",
-            "train014_R2_LE_1.5.tfrecords",
-            "train015_R2_LE_1.5.tfrecords",
-            "train016_R2_LE_1.5.tfrecords",
-            "train017_R2_LE_1.5.tfrecords",
-            "train018_R2_LE_1.5.tfrecords",
-            "train019_R2_LE_1.5.tfrecords",
-            "train020_R2_LE_1.5.tfrecords",
-            "train021_R2_LE_1.5.tfrecords",
-            "train022_R2_LE_1.5.tfrecords",
-            "train023_R2_LE_1.5.tfrecords",
-            "train024_R2_LE_1.5.tfrecords",
-            "train025_R2_LE_1.5.tfrecords",
-            "train026_R2_LE_1.5.tfrecords",
-            "train027_R2_LE_1.5.tfrecords",
-            "train028_R2_LE_1.5.tfrecords",
-            "train029_R2_LE_1.5.tfrecords",
-            "train030_R2_LE_1.5.tfrecords",
-            "train031_R2_LE_1.5.tfrecords"]
+            ["train000_R2_LE_0.4.tfrecords",
+            "train001_R2_LE_0.4.tfrecords",
+            "train002_R2_LE_0.4.tfrecords",
+            "train003_R2_LE_0.4.tfrecords",
+            "train004_R2_LE_0.4.tfrecords",
+            "train005_R2_LE_0.4.tfrecords",
+            "train006_R2_LE_0.4.tfrecords",
+            "train007_R2_LE_0.4.tfrecords",
+            "train008_R2_LE_0.4.tfrecords",
+            "train009_R2_LE_0.4.tfrecords",
+            "train010_R2_LE_0.4.tfrecords",
+            "train011_R2_LE_0.4.tfrecords",
+            "train012_R2_LE_0.4.tfrecords",
+            "train013_R2_LE_0.4.tfrecords",
+            "train014_R2_LE_0.4.tfrecords",
+            "train015_R2_LE_0.4.tfrecords",
+            <!--
+            "train016_R2_LE_0.4.tfrecords",
+            "train017_R2_LE_0.4.tfrecords",
+            "train018_R2_LE_0.4.tfrecords",
+            "train019_R2_LE_0.4.tfrecords",
+            "train020_R2_LE_0.4.tfrecords",
+            "train021_R2_LE_0.4.tfrecords",
+            "train022_R2_LE_0.4.tfrecords",
+            "train023_R2_LE_0.4.tfrecords",
+            "train024_R2_LE_0.4.tfrecords",
+            "train025_R2_LE_0.4.tfrecords",
+            "train026_R2_LE_0.4.tfrecords",
+            "train027_R2_LE_0.4.tfrecords",
+            "train028_R2_LE_0.4.tfrecords",
+            "train029_R2_LE_0.4.tfrecords",
+            "train030_R2_LE_0.4.tfrecords",
+            "train031_R2_LE_0.4.tfrecords" -->]
         </train_lvar>
         <train_hvar>
-            ["train000_R2_GT_1.5.tfrecords",
-            "train001_R2_GT_1.5.tfrecords",
-            "train002_R2_GT_1.5.tfrecords",
-            "train003_R2_GT_1.5.tfrecords",
-            "train004_R2_GT_1.5.tfrecords",
-            "train005_R2_GT_1.5.tfrecords",
-            "train006_R2_GT_1.5.tfrecords",
-            "train007_R2_GT_1.5.tfrecords",
-            "train008_R2_GT_1.5.tfrecords",
-            "train009_R2_GT_1.5.tfrecords",
-            "train010_R2_GT_1.5.tfrecords",
-            "train011_R2_GT_1.5.tfrecords",
-            "train012_R2_GT_1.5.tfrecords",
-            "train013_R2_GT_1.5.tfrecords",
-            "train014_R2_GT_1.5.tfrecords",
-            "train015_R2_GT_1.5.tfrecords",
-            "train016_R2_GT_1.5.tfrecords",
-            "train017_R2_GT_1.5.tfrecords",
-            "train018_R2_GT_1.5.tfrecords",
-            "train019_R2_GT_1.5.tfrecords",
-            "train020_R2_GT_1.5.tfrecords",
-            "train021_R2_GT_1.5.tfrecords",
-            "train022_R2_GT_1.5.tfrecords",
-            "train023_R2_GT_1.5.tfrecords",
-            "train024_R2_GT_1.5.tfrecords",
-            "train025_R2_GT_1.5.tfrecords",
-            "train026_R2_GT_1.5.tfrecords",
-            "train027_R2_GT_1.5.tfrecords",
-            "train028_R2_GT_1.5.tfrecords",
-            "train029_R2_GT_1.5.tfrecords",
-            "train030_R2_GT_1.5.tfrecords",
-            "train031_R2_GT_1.5.tfrecords"]
+            ["train000_R2_GT_0.4.tfrecords",
+            "train001_R2_GT_0.4.tfrecords",
+            "train002_R2_GT_0.4.tfrecords",
+            "train003_R2_GT_0.4.tfrecords",
+            "train004_R2_GT_0.4.tfrecords",
+            "train005_R2_GT_0.4.tfrecords",
+            "train006_R2_GT_0.4.tfrecords",
+            "train007_R2_GT_0.4.tfrecords",
+            "train008_R2_GT_0.4.tfrecords",
+            "train009_R2_GT_0.4.tfrecords",
+            "train010_R2_GT_0.4.tfrecords",
+            "train011_R2_GT_0.4.tfrecords",
+            "train012_R2_GT_0.4.tfrecords",
+            "train013_R2_GT_0.4.tfrecords",
+            "train014_R2_GT_0.4.tfrecords",
+            "train015_R2_GT_0.4.tfrecords",
+            <!--
+            "train016_R2_GT_0.4.tfrecords",
+            "train017_R2_GT_0.4.tfrecords",
+            "train018_R2_GT_0.4.tfrecords",
+            "train019_R2_GT_0.4.tfrecords",
+            "train020_R2_GT_0.4.tfrecords",
+            "train021_R2_GT_0.4.tfrecords",
+            "train022_R2_GT_0.4.tfrecords",
+            "train023_R2_GT_0.4.tfrecords",
+            "train024_R2_GT_0.4.tfrecords",
+            "train025_R2_GT_0.4.tfrecords",
+            "train026_R2_GT_0.4.tfrecords",
+            "train027_R2_GT_0.4.tfrecords",
+            "train028_R2_GT_0.4.tfrecords",
+            "train029_R2_GT_0.4.tfrecords",
+            "train030_R2_GT_0.4.tfrecords",
+            "train031_R2_GT_0.4.tfrecords"-->]
         </train_hvar>
 
         <train_lvar1>
@@ -214,23 +273,64 @@
             "train031_R2_GT_0.4.tfrecords"]
         </train_hvar1>
 
+        <!-- Currently test* and fake* should have exactly one entry each.Should be defined for each non-None TEST_TITLES element-->
 
         <test_lvar>
-            ["train004_R2_GT_1.5.tfrecords"]
+            ["testTEST_R2_LE_0.4.tfrecords"]  <!-- test file, low variance, no offset-->
         </test_lvar>
-        
         <test_hvar>
-            ["testTEST_R2_GT_1.5.tfrecords"]
+            ["testTEST_R2_GT_0.4.tfrecords"]  <!-- test file, high variance, no offset-->
         </test_hvar>
-        
+
+        <test_lvar1>
+            ["testTEST_R2_LE_0.4.tfrecords"]  <!-- test file, low variance, +/-2 pix offset-->
+        </test_lvar1>
+        <test_hvar1>
+            ["testTEST_R2_GT_0.4.tfrecords"]  <!-- test file, high variance, +/-2 pix offset-->
+        </test_hvar1>
+
+        <fake_lvar>
+            ["testFAKE_R2_LE_0.4.tfrecords"]  <!-- fake test (made from train data) file, low variance, no offset-->
+        </fake_lvar>
+
+        <fake_hvar>
+            ["testFAKE_R2_GT_0.4.tfrecords"]  <!-- fake test (made from train data) file, high variance, no offset-->
+        </fake_hvar>
+
+        <fake_lvar1>
+            ["testFAKE_R2_LE_0.4.tfrecords"]  <!-- fake test (made from train data) file, low variance, +/-2 pix offset-->
+        </fake_lvar1>
+        <fake_hvar1>
+            ["testFAKE_R2_GT_0.4.tfrecords"]  <!-- fake test (made from train data) file, high variance, +/-2 pix offset-->
+        </fake_hvar1>
+
         <images>
-            ["1527257933_150165-v04", <!--  overlook -->
+            ["1527257235_150165-v02", <!-- City Creek 1 -->
+             "1527257235_350165-v02", <!-- City Creek 2  -->
+             "1527257235_550165-v02", <!-- City Creek 3   -->
+             "1527257235_750165-v02", <!-- City Creek 4  -->
+             "1527257235_950165-v02", <!-- City Creek 5   -->
+             "1527257244_350165-v02", <!-- City Creek 6  -->
+             "1527257370_950165-v02", <!-- State Capitol  -->
+             "1527257406_950165-v02", <!-- Stop Sign  -->
+             "1527257757_950165-v02", <!-- SLC from Capitol Hill 1  -->
+             "1527257787_950165-v02", <!-- SLC from Capitol Hill 2  -->
+             "1527257894_750165-v02", <!-- Overlook approach   -->
+             "1527258897_071435-v02", <!-- North Salt Lake 1  -->
+             "1527258936_671435-v02", <!-- North Salt Lake 2 -->
+             "1527259003_271435-v02", <!-- North Salt Lake 3  -->
+             "1527257933_150165-v04", <!--  overlook -->
              "1527256858_150165-v01", <!--  State Street -->
              "1527256816_150165-v02", <!--  State Street -->
              "1527182802_096892-v02", <!--  plane near plane -->
              "1527182805_096892-v02", <!--  plane midrange used up to -49 plane -->
-             "1527182810_096892-v02"]  <!--  plane far -->
+             "1527182810_096892-v02"  <!--  plane far -->
+            ]
         </images>
+        <checkpoints>
+            "model_checkpoints"
+        </checkpoints>
+        
     </files>
 </properties>
  

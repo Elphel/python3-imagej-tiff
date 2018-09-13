@@ -16,7 +16,7 @@ import sys
 import time
 
 import matplotlib.pyplot as plt
-
+from matplotlib.backends.backend_pdf import PdfPages
 import qcstereo_functions as qsf
 
 #import xml.etree.ElementTree as ET
@@ -53,8 +53,17 @@ TILE_SIDE, TILE_LAYERS, TWO_TRAINS, NET_ARCH1, NET_ARCH2 = [None]*5
 ABSOLUTE_DISPARITY,SYM8_SUB, WLOSS_LAMBDA,  SLOSS_LAMBDA, SLOSS_CLIP  = [None]*5
 SPREAD_CONVERGENCE, INTER_CONVERGENCE, HOR_FLIP, DISP_DIFF_CAP, DISP_DIFF_SLOPE  = [None]*5
 CLUSTER_RADIUS,ABSOLUTE_DISPARITY = [None]*2
+FIGS_EXTENSIONS = ['png','pdf','svg']
+#FIGS_ESXTENSIONS = ['png','pdf','svg']
+EVAL_MODES = ["train","infer"]
+FIGS_SAVESHOW = ['save','show']
+
     
 globals().update(parameters)
+try:
+    FIGS_EXTENSIONS = globals()['FIGS_ESXTENSIONS'] # fixing typo in configs
+except:
+    pass
 
 
 #exit(0)
@@ -98,6 +107,7 @@ TIGHT_HPAD = 1.0
 TIGHT_WPAD = 1.0
 FIGSIZE = [8.5,11.0]
 WOI_COLOR = "red"
+TRANSPARENT = True # for export
 
 #dbg_parameters
 def get_fig_params(disparity_ranges):
@@ -121,77 +131,133 @@ def get_fig_params(disparity_ranges):
 fig_params = get_fig_params(dbg_parameters['disparity_ranges'])
 
 pass
-figs = []
-def setlimsxy(lim_xy):
-    if not lim_xy is None:
-        plt.xlim(min(lim_xy[:2]),max(lim_xy[:2]))            
-        plt.ylim(max(lim_xy[2:]),min(lim_xy[2:]))            
+
+if not 'show' in FIGS_SAVESHOW:
+    plt.ioff()
+
+for mode in ['train','infer']:
+    figs = []
+    ffiles = [] # no ext
+    def setlimsxy(lim_xy):
+        if not lim_xy is None:
+            plt.xlim(min(lim_xy[:2]),max(lim_xy[:2]))            
+            plt.ylim(max(lim_xy[2:]),min(lim_xy[2:]))            
+        
+    for nfile, fpars in enumerate(fig_params):
+        if not fpars is None:
+            img_file = files['result'][nfile]
+            if mode == 'infer':
+                img_file = img_file.replace('.npy','-infer.npy')
+            try:    
+                data,_ = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=True)
+            except:
+                print ("Image file does not exist:", img_file)
+                continue
+            
+            for subindex, rng in enumerate(fpars['ranges']):
+                lim_val = rng['lim_val']
+                lim_xy =  rng['lim_xy']
+                fig = plt.figure(figsize=FIGSIZE)
+                fig.canvas.set_window_title(fpars['name'])
+                fig.suptitle(fpars['name'])
+                ax_conf=plt.subplot(322)
+                ax_conf.set_title("Ground truth confidence")
+    #            fig.suptitle("Groud truth confidence")
+                plt.imshow(data[...,GT_CONF], vmin=0, vmax=CONF_MAX, cmap='gray')
+                if not lim_xy is None:
+                    pass # show frame
+                    xdata=[min(lim_xy[:2]),max(lim_xy[:2]),max(lim_xy[:2]),min(lim_xy[:2]),min(lim_xy[:2])]
+                    ydata=[min(lim_xy[2:]),min(lim_xy[2:]),max(lim_xy[2:]),max(lim_xy[2:]),min(lim_xy[2:])]
+                    plt.plot(xdata,ydata,color=WOI_COLOR)
+                
+    #            setlimsxy(lim_xy)
+                plt.colorbar(orientation='vertical') # location='bottom')
+                
+                ax_gtd=plt.subplot(321)
+                ax_gtd.set_title("Ground truth disparity map")
+                plt.imshow(data[...,GT_DISP], vmin=lim_val[0], vmax=lim_val[1])
+                setlimsxy(lim_xy)            
+                plt.colorbar(orientation='vertical') # location='bottom')
+                
+                ax_hed=plt.subplot(323)
+                ax_hed.set_title("Heuristic disparity map")
+                plt.imshow(data[...,HEUR_NAN], vmin=lim_val[0], vmax=lim_val[1])            
+                setlimsxy(lim_xy)                        
+                plt.colorbar(orientation='vertical') # location='bottom')
+            
+                ax_nnd=plt.subplot(325)
+                ax_nnd.set_title("Network disparity output")
+                plt.imshow(data[...,NN_NAN], vmin=lim_val[0], vmax=lim_val[1])
+                setlimsxy(lim_xy)                        
+                plt.colorbar(orientation='vertical') # location='bottom')
     
-for nfile, fpars in enumerate(fig_params):
-    if not fpars is None:
-        data = qsf.result_npy_prepare(files['result'][nfile], ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=True)
-        
-        for rng in fpars['ranges']:
-            lim_val = rng['lim_val']
-            lim_xy =  rng['lim_xy']
-            fig = plt.figure(figsize=FIGSIZE)
-            fig.canvas.set_window_title(fpars['name'])
-            fig.suptitle(fpars['name'])
-            ax_conf=plt.subplot(322)
-            ax_conf.set_title("Ground truth confidence")
-#            fig.suptitle("Groud truth confidence")
-            plt.imshow(data[...,GT_CONF], vmin=0, vmax=CONF_MAX, cmap='gray')
-            if not lim_xy is None:
-                pass # show frame
-                xdata=[min(lim_xy[:2]),max(lim_xy[:2]),max(lim_xy[:2]),min(lim_xy[:2]),min(lim_xy[:2])]
-                ydata=[min(lim_xy[2:]),min(lim_xy[2:]),max(lim_xy[2:]),max(lim_xy[2:]),min(lim_xy[2:])]
-                plt.plot(xdata,ydata,color=WOI_COLOR)
+                ax_hee=plt.subplot(324)
+                ax_hee.set_title("Heuristic disparity error")
+                plt.imshow(data[...,HEUR_DIFF], vmin=-ERR_AMPL, vmax=ERR_AMPL)            
+                setlimsxy(lim_xy)                        
+                plt.colorbar(orientation='vertical') # location='bottom')
+    
+                ax_nne=plt.subplot(326)
+                ax_nne.set_title("Network disparity error")
+                plt.imshow(data[...,NN_DIFF], vmin=-ERR_AMPL, vmax=ERR_AMPL)            
+                setlimsxy(lim_xy)                        
+                plt.colorbar(orientation='vertical') # location='bottom')
             
-#            setlimsxy(lim_xy)
-            plt.colorbar(orientation='vertical') # location='bottom')
-            
-            ax_gtd=plt.subplot(321)
-            ax_gtd.set_title("Ground truth disparity map")
-            plt.imshow(data[...,GT_DISP], vmin=lim_val[0], vmax=lim_val[1])
-            setlimsxy(lim_xy)            
-            plt.colorbar(orientation='vertical') # location='bottom')
-            
-            ax_hed=plt.subplot(323)
-            ax_hed.set_title("Heuristic disparity map")
-            plt.imshow(data[...,HEUR_NAN], vmin=lim_val[0], vmax=lim_val[1])            
-            setlimsxy(lim_xy)                        
-            plt.colorbar(orientation='vertical') # location='bottom')
-        
-            ax_nnd=plt.subplot(325)
-            ax_nnd.set_title("Network disparity output")
-            plt.imshow(data[...,NN_NAN], vmin=lim_val[0], vmax=lim_val[1])
-            setlimsxy(lim_xy)                        
-            plt.colorbar(orientation='vertical') # location='bottom')
-
-            ax_hee=plt.subplot(324)
-            ax_hee.set_title("Heuristic disparity error")
-            plt.imshow(data[...,HEUR_DIFF], vmin=-ERR_AMPL, vmax=ERR_AMPL)            
-            setlimsxy(lim_xy)                        
-            plt.colorbar(orientation='vertical') # location='bottom')
-
-            ax_nne=plt.subplot(326)
-            ax_nne.set_title("Network disparity error")
-            plt.imshow(data[...,NN_DIFF], vmin=-ERR_AMPL, vmax=ERR_AMPL)            
-            setlimsxy(lim_xy)                        
-            plt.colorbar(orientation='vertical') # location='bottom')
-        
-            plt.tight_layout(rect =[0,0,1,TIGHT_TOP], h_pad = TIGHT_HPAD, w_pad = TIGHT_WPAD)
-            
-            figs.append(fig)
+                plt.tight_layout(rect =[0,0,1,TIGHT_TOP], h_pad = TIGHT_HPAD, w_pad = TIGHT_WPAD)
+                
+                figs.append(fig)
+                fb_noext = os.path.splitext(os.path.basename(img_file))[0]#
+                if subindex > 0:
+                    if subindex < 10:
+                        fb_noext+="abcdefghi"[subindex-1]
+                    else:
+                        fb_noext+="-"+str(subindex)
+                ffiles.append(fb_noext)
+                pass
+    
+    #whow to allow adjustment before applying tight_layout?
+    pass
+    for fig in figs:
+        fig.tight_layout(rect =[0,0,1,TIGHT_TOP], h_pad = TIGHT_HPAD, w_pad = TIGHT_WPAD)
+    
+    if FIGS_EXTENSIONS and figs and 'save' in FIGS_SAVESHOW:
+        try:
+            print ("Creating output directory for figures: ",dirs['figures'])
+            os.makedirs(dirs['figures'])
+        except:
             pass
+        pp=None
+        if 'pdf' in FIGS_EXTENSIONS:
+            if mode == 'infer':
+                pdf_path = os.path.join(dirs['figures'],"figures-infer.pdf")
+            else:
+                pdf_path = os.path.join(dirs['figures'],"figures-train.pdf")
+            pp= PdfPages(pdf_path)
+        
+        for fb_noext, fig in zip(ffiles,figs):
+            for ext in FIGS_EXTENSIONS:
+                if ext == 'pdf':
+                    pass
+                    fig.savefig(pp,format='pdf')
+                else:
+                    if mode == 'infer':
+                        noext = fb_noext+'-infer'
+                    else:
+                        noext = fb_noext+'-train'
+                    
+                    fig.savefig(
+                        fname = os.path.join(dirs['figures'],noext+"."+ext),
+                        transparent = TRANSPARENT,
+                        )
+                pass
+        if pp:
+            pp.close()
+            
+            
+if 'show' in FIGS_SAVESHOW:    
+    plt.show()
 
-#whow to allow adjustment before applying tight_layout?
-pass
-for fig in figs:
-    fig.tight_layout(rect =[0,0,1,TIGHT_TOP], h_pad = TIGHT_HPAD, w_pad = TIGHT_WPAD)
-plt.show()
-
-
+#FIGS_ESXTENSIONS
 
 #qsf.evaluateAllResults(result_files = files['result'],
 #                       absolute_disparity = ABSOLUTE_DISPARITY,
