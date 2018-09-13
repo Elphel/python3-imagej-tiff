@@ -131,6 +131,10 @@
         <checkpoints>
             "tf_data_5x5_main_13_heur/checkpoints"
         </checkpoints>
+        <inference>
+            "tf_data_5x5_main_13_heur/inference"
+        </inference>
+        
     </directories>
     <files>
         <train_lvar>
@@ -330,6 +334,9 @@
         <checkpoints>
             "model_checkpoints"
         </checkpoints>
+        <inference>
+            "model"
+        </inference>
         
     </files>
 </properties>

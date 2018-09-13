@@ -4,15 +4,14 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
-#python3 nn_ds_neibs17.py /home/eyesis/x3d_data/data_sets/conf/qcstereo_conf13.xml /home/eyesis/x3d_data/data_sets
+#Builds (and saved) inference model from trained by nn_ds_neibs21.py
+#Model and weights are used by the inference-only infer_qcds_graph.py
 import os
 import sys
 import numpy as np
 import time
 import shutil
-from threading import Thread
 import qcstereo_network
-import qcstereo_losses
 import qcstereo_functions as qsf
 import tensorflow as tf
 from tensorflow.python.ops import resource_variable_ops
@@ -120,26 +119,10 @@ image_data = qsf.initImageData( # just use image_data[0]
                 infer =          True,
                 keep_gt =        True) # to generate same output files
 
-ph_corr2d =           tf.placeholder(np.float32, (None,FEATURES_PER_TILE))
-ph_target_disparity = tf.placeholder(np.float32, (None,1))
-#ph_tile_yx =          tf.placeholder(np.int32,   (None,2))  #tile_y, tile_x
-ph_ntile =            tf.placeholder(np.int32,   (None,))  #nTile
-ph_ntile_out =        tf.placeholder(np.int32,   (None,))  #which tiles should be calculated in stage2 
-
-
-
-"""
-dataset_img = tf.data.Dataset.from_tensor_slices({
-    "corr2d":           corr2d_placeholder,
-    "target_disparity": target_disparity_placeholder,
-    "xy":               tile_xy_placeholder})
-dataset_img = dataset_img.prefetch(image_data[0]['corr2d'].shape[0])
-iterator_img = dataset_img.make_initializable_iterator()
-next_element_tt = iterator_img.get_next()
-"""
-#No need to use datasets here = whole input even for the full frame( ~100MB) should fit
-
-
+ph_corr2d =           tf.placeholder(np.float32, (None,FEATURES_PER_TILE), name = 'ph_corr2d')
+ph_target_disparity = tf.placeholder(np.float32, (None,1),                 name = 'ph_target_disparity')
+ph_ntile =            tf.placeholder(np.int32,   (None,),                  name = 'ph_ntile')  #nTile
+ph_ntile_out =        tf.placeholder(np.int32,   (None,),                  name = 'ph_ntile_out')  #which tiles should be calculated in stage2 
 
 #corr2d9x325 = tf.concat([tf.reshape(next_element_tt['corr2d'],[-1,cluster_size,FEATURES_PER_TILE]) , tf.reshape(next_element_tt['target_disparity'], [-1,cluster_size, 1])],2)
 tf_intile325 =  tf.concat([ph_corr2d, ph_target_disparity],axis=1,name="tf_intile325") # [?,325]
@@ -156,7 +139,8 @@ Probably ResourceVariable is not needed here because of the tf.scatter_update()
 If collection is not provided, it defaults to  [GraphKeys.GLOBAL_VARIABLES], and that in turn fails saver.restore() as this variable was not available in the trained model
 """
 
-rv_stage1_out = resource_variable_ops.ResourceVariable(
+#rv_stage1_out = resource_variable_ops.ResourceVariable(
+rv_stage1_out = tf.Variable(
     np.zeros([HEIGHT * WIDTH, NN_LAYOUT1[-1]]),
 ##    collections = [],
     collections = [GraphKeys.LOCAL_VARIABLES],# Works, available with tf.local_variables()
@@ -188,7 +172,7 @@ tf_stage2_in_sparse = tf.gather(tf_stage2_in, indices= ph_ntile_out, axis=0, nam
 #ext=np.concatenate([aextv[:1,:,:]]*1 + [aextv] + [aextv[-1:,:,:]]*3,axis = 0)
 
 
-with tf.name_scope("Siam_net"): # to have the same scope for weight/biases?
+with tf.name_scope("Disparity_net"): # to have the same scope for weight/biases?
     ns, _ = qcstereo_network.network_sub(tf_intile325,
                                  input_global = [None,ph_target_disparity][SPREAD_CONVERGENCE], # input_global[:,i,:],
                                  layout= NN_LAYOUT1,
@@ -203,24 +187,41 @@ with tf.name_scope("Siam_net"): # to have the same scope for weight/biases?
     with tf.control_dependencies([update]):
         stage1done = tf.constant(1, dtype=tf.int32, name="stage1done")
         pass
-    stage2_out_sparse = qcstereo_network.network_inter (
+    stage2_out_sparse0 = qcstereo_network.network_inter (
                                                  input_tensor =   tf_stage2_in_sparse,
                                                  input_global =   None, #  [None, ig][inter_convergence], # optionally feed all convergence values (from each tile of a cluster)
                                                  layout =         NN_LAYOUT2,
                                                  reuse =          False,
                                                  use_confidence = False)
+    stage2_out_sparse = tf.identity(stage2_out_sparse0, name = 'stage2_out_sparse')
+     
     if not USE_SPARSE_ONLY: #Does it reduce the graph size?
-        stage2_out_full = qcstereo_network.network_inter (
+        stage2_out_full0 = qcstereo_network.network_inter (
                                                  input_tensor =   tf_stage2_in,
                                                  input_global =   None, #  [None, ig][inter_convergence], # optionally feed all convergence values (from each tile of a cluster)
                                                  layout =         NN_LAYOUT2,
                                                  reuse =          True,
                                                  use_confidence = False)
+        stage2_out_full = tf.identity(stage2_out_full0, name = 'stage2_out_full') 
+
     pass
 
 ROOT_PATH  = './attic/infer_qcds_graph'+SUFFIX+"/" # for tensorboard
-
-saver=tf.train.Saver()
+"""
+This is needed if ResourceVariable is used - then i/o tensors names somehow disappeared
+and were replaced by 'Placeholder_*'
+collection_io = 'collection_io'
+tf.add_to_collection(collection_io, ph_corr2d)
+tf.add_to_collection(collection_io, ph_target_disparity)
+tf.add_to_collection(collection_io, ph_ntile)
+tf.add_to_collection(collection_io, ph_ntile_out)
+tf.add_to_collection(collection_io, stage1done)
+tf.add_to_collection(collection_io, stage2_out_sparse)
+"""
+##saver=tf.train.Saver()
+saver=tf.train.Saver(tf.global_variables())
+saver_def = saver.as_saver_def()
+pass
 """
 saver_def = saver.as_saver_def()
 
@@ -238,11 +239,18 @@ saver_def.restore_op_name= save/restore_all
 saver_def.save_tensor_name= save/control_dependency:0
 print(saver.save(sess, files["checkpoints"]))
 """
+try:
+    os.makedirs(os.path.dirname(files['inference']))
+    print ("Created directory ",os.path.dirname(files['inference']))
+except:
+    pass
+
 
 with tf.Session()  as sess:
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     saver.restore(sess, files["checkpoints"])    
+    saver.save(sess, files["inference"])  #TODO: move to different subdir  
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
     lf = None
@@ -288,12 +296,6 @@ with tf.Session()  as sess:
             [disp_out.reshape(-1,1),
              dataset_img['t_disps'], #t_disps[ntest],
              dataset_img['gtruths'], # gtruths[ntest],
-#             dbg_cost_nw.reshape(-1,1),
-#             dbg_cost_w.reshape(-1,1),
-#             dbg_d.reshape(-1,1),
-#             dbg_avg_disparity.reshape(-1,1),
-#             dbg_gt_disparity.reshape(-1,1),
-#             dbg_offs.reshape(-1,1)
              ],1)
         np.save(result_file,           rslt.reshape(HEIGHT,WIDTH,-1))
         rslt = qsf.eval_results(result_file, ABSOLUTE_DISPARITY, radius=CLUSTER_RADIUS, logfile=lf)  # (re-loads results). Only uses first 4 layers
@@ -305,7 +307,8 @@ with tf.Session()  as sess:
         """
         image_data[nimg] = None
         
-                    
+    meta_graph_def = tf.train.export_meta_graph(files["inference"]+'.meta')
+                
     
     if lf:
         lf.close()

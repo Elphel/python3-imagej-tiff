@@ -118,11 +118,19 @@ def prepareFiles(dirs, files, suffix):
     for i, path in enumerate(files['images']):
         result_files.append(os.path.join(dirs['result'], path+"_"+suffix+'.npy'))
     files['result'] = result_files
+
     if not 'checkpoints' in files:
         files['checkpoints'] = 'checkpoints'
     if not 'checkpoints' in dirs:
         dirs['checkpoints'] = dirs['result']
     files['checkpoints'] = os.path.join(dirs['checkpoints'], files['checkpoints'])    
+
+    if not 'inference' in files:
+        files['inference'] = 'inference'
+    if not 'inference' in dirs:
+        dirs['inference'] = dirs['result']
+    files['inference'] = os.path.join(dirs['inference'], files['inference'])    
+    
     if not 'figures' in dirs:
         dirs['figures'] = os.path.join(dirs['result'],"figs")
      
