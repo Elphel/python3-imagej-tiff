@@ -47,12 +47,7 @@
                       "Fake flat random",
                       "Fake edge random"]</TEST_TITLES>
         <CHECKPOINT_PERIOD>100</CHECKPOINT_PERIOD>
-        <!--    <FIGS_ESXTENSIONS>["png","pdf","svg"]</FIGS_ESXTENSIONS> -->
-        <FIGS_EXTENSIONS>["pdf"]</FIGS_EXTENSIONS>
-        <!--        <FIGS_SAVESHOW>['save','show']</FIGS_SAVESHOW> -->
-        <FIGS_SAVESHOW>['save']</FIGS_SAVESHOW>
-        <EVAL_MODES>["train","infer"]</EVAL_MODES>
-        
+        <FIGS_ESXTENSIONS>["png","pdf","svg"]</FIGS_ESXTENSIONS>
         
     </parameters>
     <dbg_parameters>
@@ -70,14 +65,7 @@
              [[0.0, 0.6,[ 95,210, 65,140]],                                "Overlook approach"],
              [[0.0,10.0,[ 60,190, 95,145]],                                "North Salt Lake 1"],
              [[0.0, 5.0,[120,230, 85,145]],                                "North Salt Lake 2"], <!-- bad pole -->
-             [[0.0, 2.0,[ 10,155, 90,150]],                                "North Salt Lake 3"], <!-- LPF? misaligned? -->
-             [[0.0, 0.6,[140,230,135,60]],                                 "Overlook"],
-             [[0.0, 1.0,[120,180,125,80]],[2.0, 4.0,   [50,130,125, 70]],  "State Street1"],
-             [[0.0, 1.0,[130,210,135,95]],[0.5, 2.5,   [50,150,150, 75]],  "State Street2"],
-             [                            [1.0, 2.5,   [90,170, 50,  0]],  "B737 near"],
-             [                            [0.75, 1.5, [125,150, 90, 70]],  "B737 midrange"],
-             [                            [0.4,  0.8, [135,150,102,112]],  "B737 far"]
-             ]
+             [[0.0, 2.0,[ 10,155, 90,150]],                                "North Salt Lake 3"]] <!-- LPF? misaligned? -->
         </disparity_ranges>
     </dbg_parameters>
     <directories>
@@ -131,10 +119,6 @@
         <checkpoints>
             "tf_data_5x5_main_13_heur/checkpoints"
         </checkpoints>
-        <inference>
-            "tf_data_5x5_main_13_heur/inference"
-        </inference>
-        
     </directories>
     <files>
         <train_lvar>
@@ -150,11 +134,11 @@
             "train009_R2_LE_0.4.tfrecords",
             "train010_R2_LE_0.4.tfrecords",
             "train011_R2_LE_0.4.tfrecords",
+            <!--
             "train012_R2_LE_0.4.tfrecords",
             "train013_R2_LE_0.4.tfrecords",
             "train014_R2_LE_0.4.tfrecords",
             "train015_R2_LE_0.4.tfrecords",
-            <!--
             "train016_R2_LE_0.4.tfrecords",
             "train017_R2_LE_0.4.tfrecords",
             "train018_R2_LE_0.4.tfrecords",
@@ -185,11 +169,11 @@
             "train009_R2_GT_0.4.tfrecords",
             "train010_R2_GT_0.4.tfrecords",
             "train011_R2_GT_0.4.tfrecords",
+            <!--
             "train012_R2_GT_0.4.tfrecords",
             "train013_R2_GT_0.4.tfrecords",
             "train014_R2_GT_0.4.tfrecords",
             "train015_R2_GT_0.4.tfrecords",
-            <!--
             "train016_R2_GT_0.4.tfrecords",
             "train017_R2_GT_0.4.tfrecords",
             "train018_R2_GT_0.4.tfrecords",
@@ -323,20 +307,11 @@
              "1527258897_071435-v02", <!-- North Salt Lake 1  -->
              "1527258936_671435-v02", <!-- North Salt Lake 2 -->
              "1527259003_271435-v02", <!-- North Salt Lake 3  -->
-             "1527257933_150165-v04", <!--  overlook -->
-             "1527256858_150165-v01", <!--  State Street -->
-             "1527256816_150165-v02", <!--  State Street -->
-             "1527182802_096892-v02", <!--  plane near plane -->
-             "1527182805_096892-v02", <!--  plane midrange used up to -49 plane -->
-             "1527182810_096892-v02"  <!--  plane far -->
             ]
         </images>
         <checkpoints>
             "model_checkpoints"
         </checkpoints>
-        <inference>
-            "model"
-        </inference>
         
     </files>
 </properties>
