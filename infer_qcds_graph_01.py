@@ -97,7 +97,7 @@ qsf.prepareFiles(dirs,
 """
 Next is tag for pb (pb == protocol buffer) model
 """
-PB_TAG = "model_pb" 
+PB_TAGS = ["model_pb"]
 
 print ("Copying config files to results directory:\n ('%s' -> '%s')"%(conf_file,dirs['result']))
 try:
@@ -129,12 +129,25 @@ try:
 except:
     pass
 
-shutil.rmtree(dirs['exportdir'], ignore_errors=True)
-builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
-
 with tf.Session()  as sess:
     
-    infer_saver = tf.train.import_meta_graph(files["inference"]+'.meta')
+    # default option
+    use_saved_model = False
+    if os.path.isdir(dirs['exportdir']):
+        # check if dir contains "Saved Model" model
+        use_saved_model = tf.saved_model.loader.maybe_saved_model_directory(dirs['exportdir'])
+
+    if use_saved_model:
+        print("Model restore: using Saved_Model model MetaGraph protocol buffer")
+        meta_graph_source = tf.saved_model.loader.load(sess, PB_TAGS, dirs['exportdir'])
+    else:
+        print("Model restore: using conventionally saved model, but saving Saved Model for the next run")
+        meta_graph_source = files["inference"]+'.meta'
+
+        shutil.rmtree(dirs['exportdir'], ignore_errors=True)
+        builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
+
+    infer_saver = tf.train.import_meta_graph(meta_graph_source)
     
     graph=tf.get_default_graph()
     ph_corr2d =           graph.get_tensor_by_name('ph_corr2d:0') 
@@ -203,11 +216,10 @@ with tf.Session()  as sess:
         """
         image_data[nimg] = None
     
-    # when saved tags can be read with saved_model_cli which is built from tensorflow source using bazel
-    builder.add_meta_graph_and_variables(sess,[PB_TAG])
+    if not use_saved_model:
+        builder.add_meta_graph_and_variables(sess,PB_TAGS)
+        builder.save()
     
     if lf:
         lf.close()
     writer.close()
-    
-builder.save()
