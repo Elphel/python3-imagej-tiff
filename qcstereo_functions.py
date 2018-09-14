@@ -129,7 +129,13 @@ def prepareFiles(dirs, files, suffix):
         files['inference'] = 'inference'
     if not 'inference' in dirs:
         dirs['inference'] = dirs['result']
-    files['inference'] = os.path.join(dirs['inference'], files['inference'])    
+    files['inference'] = os.path.join(dirs['inference'], files['inference'])
+
+    if not 'exportdir' in files:
+        files['exportdir'] = 'exportdir'
+    if not 'exportdir' in dirs:
+        dirs['exportdir'] = dirs['result']
+    files['exportdir'] = os.path.join(dirs['exportdir'], files['exportdir'])
     
     if not 'figures' in dirs:
         dirs['figures'] = os.path.join(dirs['result'],"figs")

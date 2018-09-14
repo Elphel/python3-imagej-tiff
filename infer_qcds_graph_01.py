@@ -21,6 +21,7 @@ qsf.TIME_LAST  = qsf.TIME_START
 IMG_WIDTH =        324 # tiles per image row
 DEBUG_LEVEL= 1
 
+
 try:
     conf_file =  sys.argv[1]
 except IndexError:
@@ -56,6 +57,7 @@ TRAIN_BUFFER_GPU, TRAIN_BUFFER_CPU = [None]*2
 TEST_TITLES = None
 USE_SPARSE_ONLY = True
 LOGFILE="results-infer.txt"
+
 """
 Next gets globals from the config file
 """
@@ -92,6 +94,11 @@ qsf.prepareFiles(dirs,
                  files,
                  suffix = SUFFIX)
 
+"""
+Next is tag for pb (pb == protocol buffer) model
+"""
+PB_TAG = "model_pb" 
+
 print ("Copying config files to results directory:\n ('%s' -> '%s')"%(conf_file,dirs['result']))
 try:
     os.makedirs(dirs['result'])
@@ -122,8 +129,13 @@ try:
 except:
     pass
 
+shutil.rmtree(dirs['exportdir'], ignore_errors=True)
+builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
+
 with tf.Session()  as sess:
+    
     infer_saver = tf.train.import_meta_graph(files["inference"]+'.meta')
+    
     graph=tf.get_default_graph()
     ph_corr2d =           graph.get_tensor_by_name('ph_corr2d:0') 
     ph_target_disparity = graph.get_tensor_by_name('ph_target_disparity:0')
@@ -158,9 +170,9 @@ with tf.Session()  as sess:
             replace_nans =   True,
             infer =          True,
             keep_gt =        True) # to generate same output files
-        img_corr2d = dataset_img['corr2d'] # [?,324)
-        img_target = dataset_img['target_disparity'] # [?,324)
-        img_ntile =  dataset_img['ntile'].reshape([-1])
+        img_corr2d = dataset_img['corr2d'] # (?,324)
+        img_target = dataset_img['target_disparity'] # (?,1)
+        img_ntile =  dataset_img['ntile'].reshape([-1]) # (?) - 0...78k int32
         #run first stage network
         qsf.print_time("Running inferred model, stage1", end=" ")
         _  = sess.run([stage1done],
@@ -191,6 +203,11 @@ with tf.Session()  as sess:
         """
         image_data[nimg] = None
     
+    # when saved tags can be read with saved_model_cli which is built from tensorflow source using bazel
+    builder.add_meta_graph_and_variables(sess,[PB_TAG])
+    
     if lf:
         lf.close()
     writer.close()
+    
+builder.save()
