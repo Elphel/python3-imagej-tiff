@@ -134,7 +134,9 @@
         <inference>
             "tf_data_5x5_main_13_heur/inference"
         </inference>
-        
+        <exportdir>
+            "tf_data_5x5_main_13_heur/exportdir"
+        </exportdir>
     </directories>
     <files>
         <train_lvar>
@@ -337,6 +339,9 @@
         <inference>
             "model"
         </inference>
+        <exportdir>
+            "model"
+        </exportdir>
         
     </files>
 </properties>
