@@ -143,7 +143,7 @@ with tf.Session()  as sess:
     else:
         print("Model restore: using conventionally saved model, but saving Saved Model for the next run")
         meta_graph_source = files["inference"]+'.meta'
-
+        # remove 'exportdir' even it exsits and has anything
         shutil.rmtree(dirs['exportdir'], ignore_errors=True)
         builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
 
