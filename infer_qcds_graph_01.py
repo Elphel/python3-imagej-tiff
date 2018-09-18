@@ -97,7 +97,7 @@ qsf.prepareFiles(dirs,
 """
 Next is tag for pb (pb == protocol buffer) model
 """
-PB_TAGS = ["model_pb"]
+#PB_TAGS = ["model_pb"]
 
 print ("Copying config files to results directory:\n ('%s' -> '%s')"%(conf_file,dirs['result']))
 try:
@@ -139,10 +139,12 @@ with tf.Session()  as sess:
 
     if use_saved_model:
         print("Model restore: using Saved_Model model MetaGraph protocol buffer")
-        meta_graph_source = tf.saved_model.loader.load(sess, PB_TAGS, dirs['exportdir'])
+        meta_graph_source = tf.saved_model.loader.load(sess, [tf.saved_model.tag_constants.SERVING], dirs['exportdir'])
     else:
         print("Model restore: using conventionally saved model, but saving Saved Model for the next run")
         meta_graph_source = files["inference"]+'.meta'
+        print("MetaGraph source = "+str(meta_graph_source))
+        #meta_graph_source = files["inference"]+'_2.meta'
         # remove 'exportdir' even it exsits and has anything
         shutil.rmtree(dirs['exportdir'], ignore_errors=True)
         builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
@@ -164,6 +166,7 @@ with tf.Session()  as sess:
     sess.run(tf.local_variables_initializer())
 
     infer_saver.restore(sess, files["inference"]) # after initializers, of course
+    #infer_saver.restore(sess, files["inference"]+"_2") # after initializers, of course
     
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
@@ -217,8 +220,10 @@ with tf.Session()  as sess:
         image_data[nimg] = None
     
     if not use_saved_model:
-        builder.add_meta_graph_and_variables(sess,PB_TAGS)
-        builder.save()
+        #builder.add_meta_graph_and_variables(sess,PB_TAGS)
+        builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING])
+        #builder.save(True)
+        builder.save(False)
     
     if lf:
         lf.close()

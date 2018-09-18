@@ -219,8 +219,11 @@ tf.add_to_collection(collection_io, stage1done)
 tf.add_to_collection(collection_io, stage2_out_sparse)
 """
 ##saver=tf.train.Saver()
-saver=tf.train.Saver(tf.global_variables())
+saver  =tf.train.Saver(tf.global_variables())
+#saver2 =tf.train.Saver(tf.global_variables()+tf.local_variables())
+
 saver_def = saver.as_saver_def()
+
 pass
 """
 saver_def = saver.as_saver_def()
@@ -250,7 +253,10 @@ with tf.Session()  as sess:
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     saver.restore(sess, files["checkpoints"])    
-    saver.save(sess, files["inference"])  #TODO: move to different subdir  
+    
+    saver.save(sess, files["inference"])  #TODO: move to different subdir
+    #saver2.save(sess, files["inference"]+"_2")  #TODO: move to different subdir
+      
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
     lf = None
