@@ -138,6 +138,7 @@ Probably ResourceVariable is not needed here because of the tf.scatter_update()
 If collection is not provided, it defaults to  [GraphKeys.GLOBAL_VARIABLES], and that in turn fails saver.restore() as this variable was not available in the trained model
 """
 
+'''
 #rv_stage1_out = resource_variable_ops.ResourceVariable(
 rv_stage1_out = tf.Variable(
     np.zeros([HEIGHT * WIDTH, NN_LAYOUT1[-1]]),
@@ -145,14 +146,14 @@ rv_stage1_out = tf.Variable(
     collections = [GraphKeys.LOCAL_VARIABLES],# Works, available with tf.local_variables()
     dtype=np.float32,
     name = 'rv_stage1_out')
-
 '''
+
 rv_stage1_out = tf.get_variable("rv_stage1_out",
                                 shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]],
                                 dtype=tf.float32,
                                 initializer=tf.zeros_initializer,
                                 collections = [GraphKeys.LOCAL_VARIABLES],trainable=False)
-'''
+
 
 #rv_stageX_out_init_placeholder = tf.placeholder(tf.float32, shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]])
 #rv_stageX_out_init_op = rv_stageX_out.assign(rv_stageX_out_init_placeholder)
@@ -273,6 +274,10 @@ with tf.Session()  as sess:
         that do not have this variable, add it to globals.
         Actually it could have been declared right here - this
         needs testing.
+        
+        NOTE: The line below makes the next script's, that saves 
+        a Saved_Model MetaGraph, size of the Saved_Model significantly 
+        bigger.
     '''
     tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES, rv_stage1_out)
     
