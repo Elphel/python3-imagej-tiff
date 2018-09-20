@@ -129,6 +129,8 @@ try:
 except:
     pass
 
+from tensorflow.python.framework.ops import GraphKeys
+
 with tf.Session()  as sess:
     
     # default option
@@ -162,10 +164,23 @@ with tf.Session()  as sess:
     if not USE_SPARSE_ONLY: #Does it reduce the graph size?
         stage2_out_full = graph.get_tensor_by_name('Disparity_net/stage2_out_full:0') 
 
+    '''
+    if not use_saved_model:
+        rv_stage1_out = tf.get_variable("rv_stage1_out",
+                                        shape=[78408, 32],
+                                        dtype=tf.float32,
+                                        initializer=tf.zeros_initializer)
+                                        #collections = [GraphKeys.LOCAL_VARIABLES],trainable=False)
+    '''
+
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
 
-    infer_saver.restore(sess, files["inference"]) # after initializers, of course
+    if not use_saved_model:
+        infer_saver.restore(sess, files["inference"]) # after initializers, of course
+    else:
+        infer_saver.restore(sess, dirs['exportdir']+"/variables/variables.data-00000-of-00001")
+
     #infer_saver.restore(sess, files["inference"]+"_2") # after initializers, of course
     
     merged = tf.summary.merge_all()
@@ -222,8 +237,8 @@ with tf.Session()  as sess:
     if not use_saved_model:
         #builder.add_meta_graph_and_variables(sess,PB_TAGS)
         builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING])
-        #builder.save(True)
-        builder.save(False)
+        builder.save(True)
+        #builder.save(False)
     
     if lf:
         lf.close()

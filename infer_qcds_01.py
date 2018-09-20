@@ -16,7 +16,6 @@ import qcstereo_functions as qsf
 import tensorflow as tf
 from tensorflow.python.ops import resource_variable_ops
 
-
 tf.ResourceVariable = resource_variable_ops.ResourceVariable
 
 qsf.TIME_START = time.time()
@@ -146,6 +145,18 @@ rv_stage1_out = tf.Variable(
     collections = [GraphKeys.LOCAL_VARIABLES],# Works, available with tf.local_variables()
     dtype=np.float32,
     name = 'rv_stage1_out')
+
+'''
+rv_stage1_out = tf.get_variable("rv_stage1_out",
+                                shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]],
+                                dtype=tf.float32,
+                                initializer=tf.zeros_initializer,
+                                collections = [GraphKeys.LOCAL_VARIABLES], trainable=False)
+'''
+
+#rv_stageX_out_init_placeholder = tf.placeholder(tf.float32, shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]])
+#rv_stageX_out_init_op = rv_stageX_out.assign(rv_stageX_out_init_placeholder)
+
 ##stage1_tiled = tf.reshape(rv_stage1_out.read_value(),[HEIGHT, WIDTH, -1], name = 'stage1_tiled') 
 stage1_tiled = tf.reshape(rv_stage1_out, [HEIGHT, WIDTH, -1], name = 'stage1_tiled') # no need to synchronize here?
 
@@ -220,7 +231,7 @@ tf.add_to_collection(collection_io, stage2_out_sparse)
 """
 ##saver=tf.train.Saver()
 saver  =tf.train.Saver(tf.global_variables())
-#saver2 =tf.train.Saver(tf.global_variables()+tf.local_variables())
+#saver = tf.train.Saver(tf.global_variables()+tf.local_variables())
 
 saver_def = saver.as_saver_def()
 
@@ -250,9 +261,13 @@ except:
 
 
 with tf.Session()  as sess:
+        
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
-    saver.restore(sess, files["checkpoints"])    
+    
+    saver.restore(sess, files["checkpoints"])
+    
+    #tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES,rv_stage1_out)
     
     saver.save(sess, files["inference"])  #TODO: move to different subdir
     #saver2.save(sess, files["inference"]+"_2")  #TODO: move to different subdir
@@ -262,6 +277,8 @@ with tf.Session()  as sess:
     lf = None
     if LOGPATH:
         lf=open(LOGPATH,"w") #overwrite previous (or make it "a"?
+
+    #_ = sess.run([rv_stageX_out_init_op],feed_dict={rv_stageX_out_init_placeholder: np.zeros((HEIGHT * WIDTH, NN_LAYOUT1[-1]))})
 
     for nimg,_ in enumerate(image_data):
         dataset_img = qsf.readImageData(
@@ -296,7 +313,7 @@ with tf.Session()  as sess:
         try:
             os.makedirs(os.path.dirname(result_file))
         except:
-            pass     
+            pass
         
         rslt = np.concatenate(
             [disp_out.reshape(-1,1),
