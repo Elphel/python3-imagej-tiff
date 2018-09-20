@@ -151,7 +151,7 @@ rv_stage1_out = tf.get_variable("rv_stage1_out",
                                 shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]],
                                 dtype=tf.float32,
                                 initializer=tf.zeros_initializer,
-                                collections = [GraphKeys.LOCAL_VARIABLES], trainable=False)
+                                collections = [GraphKeys.LOCAL_VARIABLES],trainable=False)
 '''
 
 #rv_stageX_out_init_placeholder = tf.placeholder(tf.float32, shape=[HEIGHT * WIDTH, NN_LAYOUT1[-1]])
@@ -267,10 +267,16 @@ with tf.Session()  as sess:
     
     saver.restore(sess, files["checkpoints"])
     
-    #tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES,rv_stage1_out)
+    '''
+        rv_stage1_out belongs to GraphKeys.LOCAL_VARIABLES
+        Now when weights/biases are restored from 'checkpoints', 
+        that do not have this variable, add it to globals.
+        Actually it could have been declared right here - this
+        needs testing.
+    '''
+    tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES, rv_stage1_out)
     
-    saver.save(sess, files["inference"])  #TODO: move to different subdir
-    #saver2.save(sess, files["inference"]+"_2")  #TODO: move to different subdir
+    saver.save(sess, files["inference"])
       
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
@@ -329,8 +335,9 @@ with tf.Session()  as sess:
         Remove dataset_img (if it is not [0] to reduce memory footprint         
         """
         image_data[nimg] = None
-        
-    meta_graph_def = tf.train.export_meta_graph(files["inference"]+'.meta')
+    
+    # is this needed? why would it be?
+    #meta_graph_def = tf.train.export_meta_graph(files["inference"]+'.meta')
                 
     
     if lf:

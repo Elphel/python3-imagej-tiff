@@ -265,13 +265,15 @@ with tf.Session()  as sess:
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
     
-    saver.restore(sess, files["checkpoints"])
+    # so, here I need to restore from inference and save to inference_global
+    #saver.restore(sess, files["checkpoints"])
+    saver.restore(sess, files["inference"])
     
-    #tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES,rv_stage1_out)
+    # now add to global
+    tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES,rv_stage1_out)
     
-    saver.save(sess, files["inference"])  #TODO: move to different subdir
-    #saver2.save(sess, files["inference"]+"_2")  #TODO: move to different subdir
-      
+    saver.save(sess, 'data_sets/tf_data_5x5_main_13_heur/inference_global/model')
+
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
     lf = None

@@ -129,31 +129,29 @@ try:
 except:
     pass
 
-from tensorflow.python.framework.ops import GraphKeys
-
 with tf.Session()  as sess:
     
-    # default option
-    use_saved_model = False
-    if os.path.isdir(dirs['exportdir']):
-        # check if dir contains "Saved Model" model
-        use_saved_model = tf.saved_model.loader.maybe_saved_model_directory(dirs['exportdir'])
+    # Actually, refresh all the time and have an extra script to restore from it.  
+    # use_Saved_Model = False
+    
+    #if os.path.isdir(dirs['exportdir']):
+    #    # check if dir contains "Saved Model" model
+    #    use_saved_model = tf.saved_model.loader.maybe_saved_model_directory(dirs['exportdir'])
 
-    if use_saved_model:
-        print("Model restore: using Saved_Model model MetaGraph protocol buffer")
-        meta_graph_source = tf.saved_model.loader.load(sess, [tf.saved_model.tag_constants.SERVING], dirs['exportdir'])
-    else:
-        print("Model restore: using conventionally saved model, but saving Saved Model for the next run")
-        meta_graph_source = files["inference"]+'.meta'
-        print("MetaGraph source = "+str(meta_graph_source))
-        #meta_graph_source = files["inference"]+'_2.meta'
-        # remove 'exportdir' even it exsits and has anything
-        shutil.rmtree(dirs['exportdir'], ignore_errors=True)
-        builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
+    #if use_saved_model:
+    #    print("Model restore: using Saved_Model model MetaGraph protocol buffer")
+    #    meta_graph_source = tf.saved_model.loader.load(sess, [tf.saved_model.tag_constants.SERVING], dirs['exportdir'])
+    #else:
+    
+    meta_graph_source = files["inference"]+'.meta'
+    
+    print("Model restore: using conventionally saved model, but saving Saved Model for the next run")
+    print("MetaGraph source = "+str(meta_graph_source))
 
     infer_saver = tf.train.import_meta_graph(meta_graph_source)
     
     graph=tf.get_default_graph()
+    
     ph_corr2d =           graph.get_tensor_by_name('ph_corr2d:0') 
     ph_target_disparity = graph.get_tensor_by_name('ph_target_disparity:0')
     ph_ntile =            graph.get_tensor_by_name('ph_ntile:0')
@@ -164,27 +162,17 @@ with tf.Session()  as sess:
     if not USE_SPARSE_ONLY: #Does it reduce the graph size?
         stage2_out_full = graph.get_tensor_by_name('Disparity_net/stage2_out_full:0') 
 
-    '''
-    if not use_saved_model:
-        rv_stage1_out = tf.get_variable("rv_stage1_out",
-                                        shape=[78408, 32],
-                                        dtype=tf.float32,
-                                        initializer=tf.zeros_initializer)
-                                        #collections = [GraphKeys.LOCAL_VARIABLES],trainable=False)
-    '''
 
     sess.run(tf.global_variables_initializer())
     sess.run(tf.local_variables_initializer())
 
-    if not use_saved_model:
-        infer_saver.restore(sess, files["inference"]) # after initializers, of course
-    else:
-        infer_saver.restore(sess, dirs['exportdir']+"/variables/variables.data-00000-of-00001")
 
-    #infer_saver.restore(sess, files["inference"]+"_2") # after initializers, of course
+    infer_saver.restore(sess, files["inference"])
+    
     
     merged = tf.summary.merge_all()
     writer = tf.summary.FileWriter(ROOT_PATH, sess.graph)
+    
     lf = None
     if LOGPATH:
         lf=open(LOGPATH,"w") #overwrite previous (or make it "a"?
@@ -234,11 +222,14 @@ with tf.Session()  as sess:
         """
         image_data[nimg] = None
     
-    if not use_saved_model:
-        #builder.add_meta_graph_and_variables(sess,PB_TAGS)
-        builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING])
-        builder.save(True)
-        #builder.save(False)
+    #builder.add_meta_graph_and_variables(sess,PB_TAGS)
+    # clean
+    shutil.rmtree(dirs['exportdir'], ignore_errors=True)
+    # save MetaGraph to Saved_Model as *.pb
+    builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
+    builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING])
+    #builder.save(True)
+    builder.save(False) # True = *.pbtxt, False = *.pb
     
     if lf:
         lf.close()
