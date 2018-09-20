@@ -275,11 +275,15 @@ with tf.Session()  as sess:
         Actually it could have been declared right here - this
         needs testing.
         
-        NOTE: The line below makes the next script's, that saves 
+        NOTE1: The line below makes the next script's, that saves 
         a Saved_Model MetaGraph, size of the Saved_Model significantly 
         bigger.
+        
+        NOTE2: The line below  is commented in favor of (in the next script!):
+            builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING],main_op=tf.local_variables_initializer()) 
     '''
-    tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES, rv_stage1_out)
+    #tf.add_to_collection(GraphKeys.GLOBAL_VARIABLES, rv_stage1_out)
+    
     
     saver.save(sess, files["inference"])
       
@@ -334,7 +338,7 @@ with tf.Session()  as sess:
         np.save(result_file,           rslt.reshape(HEIGHT,WIDTH,-1))
         rslt = qsf.eval_results(result_file, ABSOLUTE_DISPARITY, radius=CLUSTER_RADIUS, logfile=lf)  # (re-loads results). Only uses first 4 layers
         if SAVE_TIFFS:
-            qsf.result_npy_to_tiff(result_file, ABSOLUTE_DISPARITY, fix_nan = True,labels=SLICE_LABELS, logfile=lf)
+            qsf.result_npy_to_tiff(result_file, ABSOLUTE_DISPARITY, fix_nan = True, labels=SLICE_LABELS, logfile=lf)
 
         """
         Remove dataset_img (if it is not [0] to reduce memory footprint         
