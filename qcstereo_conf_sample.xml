@@ -135,7 +135,7 @@
             "tf_data_5x5_main_13_heur/inference"
         </inference>
         <exportdir>
-            "tf_data_5x5_main_13_heur/exportdir"
+            "tf_data_5x5_main_13_heur/trained_model"
         </exportdir>
     </directories>
     <files>
