@@ -3,7 +3,14 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
-# Just inference, currently uses /data_ssd/data_sets/tf_data_5x5_main_13_heur/inference/
+'''
+
+** Kind of obsolete now, can be used for testing **
+Just inference, currently uses /data_ssd/data_sets/tf_data_5x5_main_13_heur/inference/
+
+'''
+
+
 import os
 import sys
 import numpy as np
