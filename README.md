@@ -18,6 +18,14 @@ or
 * Numpy 1.14.2 (not strict)
 * Matplotlib 2.2.2 (not strict)
 
+# Infer and convert model for use from Java
+```
+~$ python3 infer_qcds_01.py qcstereo_conf.xml data_sets
+```
+where: 
+* **qcstereo_conf.xml** - config file
+* **data_sets** - root dir for trained models/data/checkpoints
+
 # Examples
 ```
 #!/usr/bin/env python3
