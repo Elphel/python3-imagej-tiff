@@ -222,14 +222,14 @@ with tf.Session()  as sess:
         """
         image_data[nimg] = None
     
-    #builder.add_meta_graph_and_variables(sess,PB_TAGS)
-    # clean
+    """
+        Save MetaGraph to Saved_Model in *.pb (protocol buffer) format to
+        be able to use from Java 
+    """
+    # force clean
     shutil.rmtree(dirs['exportdir'], ignore_errors=True)
-    # save MetaGraph to Saved_Model as *.pb
     builder = tf.saved_model.builder.SavedModelBuilder(dirs['exportdir'])
     builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING],main_op=tf.local_variables_initializer())
-    #builder.add_meta_graph_and_variables(sess,[tf.saved_model.tag_constants.SERVING])
-    #builder.save(True)
     builder.save(False) # True = *.pbtxt, False = *.pb
     
     if lf:
