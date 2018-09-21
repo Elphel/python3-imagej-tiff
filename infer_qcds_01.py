@@ -4,8 +4,20 @@ __copyright__ = "Copyright 2018, Elphel, Inc."
 __license__   = "GPL-3.0+"
 __email__     = "andrey@elphel.com"
 
-#Builds (and saved) inference model from trained by nn_ds_neibs21.py
-#Model and weights are used by the inference-only infer_qcds_graph.py
+'''
+
+Builds (and saved) inference model from trained by nn_ds_neibs21.py
+Saves the model and weights in 2 formats - using Saver (for Python) and Saved_Model (for Java or Python)
+
+(old line, but still can be used) Model and weights are used by the inference-only infer_qcds_graph.py
+
+Usage:
+~$ python3 infer_qcds_01.py qcstereo_conf.xml data_sets
+
+qcstereo_conf.xml - config file with all paths
+data_sets - root dir for trained model/checkpoints, etc.
+'''
+
 import os
 import sys
 import numpy as np
