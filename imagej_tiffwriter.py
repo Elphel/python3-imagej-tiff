@@ -102,67 +102,67 @@ def imagej_metadata_tags(metadata, byteorder):
 #def save(path,images,force_stack=False,force_hyperstack=False):
 def save(path,images,labels=None,label_prefix="Label "):
 
-  '''
-    labels a list or None
-  '''
-
-  '''
+    '''
+        labels a list or None
+    '''
+    
+    '''
     Expecting:
     (h,w),
     (n,h,w) - just create a simple stack
-  '''
+      '''
 
-  # Got images, analyze shape:
-  #   - possible formats (c == depth):
-  #     -- (t,z,h,w,c)
-  #     -- (t,h,w,c), t or z does not matter
-  #     -- (h,w,c)
-  #     -- (h,w)
+    # Got images, analyze shape:
+    #   - possible formats (c == depth):
+    #     -- (t,z,h,w,c)
+    #     -- (t,h,w,c), t or z does not matter
+    #     -- (h,w,c)
+    #     -- (h,w)
+    
+    # 0 or 1 images.shapes are not handled
+    #
+    # (h,w)
+    if len(images.shape)==2:
+        images = images[np.newaxis,...]
 
-  # 0 or 1 images.shapes are not handled
-  #
-  # (h,w)
-  if len(images.shape)==2:
-    images = images[np.newaxis,...]
-
-  # now the shape length is 3
-  if len(images.shape)==3:
-    # tifffile treats shape[0] as channel, need to expand to get labels displayed
-    #images = images[images.shape[0],np.newaxis,images.shape[1],images.shape[2]]
-    images = np.reshape(images,(images.shape[0],1,images.shape[1],images.shape[2]))
-
-    labels_list = []
-    if labels is None:
-      for i in range(images.shape[0]):
-        labels_list.append(label_prefix+str(i+1))
-    else:
-      labels_list = labels
-
-    ijtags = imagej_metadata_tags({'Labels':labels_list}, '<')
-
-    with tifffile.TiffWriter(path, bigtiff=False,imagej=True) as tif:
-      for i in range(images.shape[0]):
-        tif.save(images[i], metadata={'version':'1.11a','loop': False}, extratags=ijtags)
+    # now the shape length is 3
+    if len(images.shape)==3:
+        # tifffile treats shape[0] as channel, need to expand to get labels displayed
+        #images = images[images.shape[0],np.newaxis,images.shape[1],images.shape[2]]
+        images = np.reshape(images,(images.shape[0],1,images.shape[1],images.shape[2]))
+    
+        labels_list = []
+        if labels is None:
+            for i in range(images.shape[0]):
+                labels_list.append(label_prefix+str(i+1))
+        else:
+            labels_list = labels
+    
+        ijtags = imagej_metadata_tags({'Labels':labels_list}, '<')
+    
+        with tifffile.TiffWriter(path, bigtiff=False,imagej=True) as tif:
+            for i in range(images.shape[0]):
+                tif.save(images[i], metadata={'version':'1.11a','loop': False}, extratags=ijtags)
 
 # Testing
 if __name__ == "__main__":
 
-  def hamming_window(x,N):
-    y = 0.54 - 0.46*math.cos(2*math.pi*x/(N-1))
-    return y
+    def hamming_window(x,N):
+        y = 0.54 - 0.46*math.cos(2*math.pi*x/(N-1))
+        return y
 
-  hw = hamming_window
+    hw = hamming_window
 
-  NT = 5
-  NX = 512
-  NY = 512
+    NT = 5
+    NX = 512
+    NY = 512
 
-  images = np.empty((NT,NY,NX),np.float32)
+    images = np.empty((NT,NY,NX),np.float32)
 
-  import time
-  print(str(time.time())+": Generating test images")
-  for t in range(NT):
-    images[t,:,:] = np.array([[(255-t*25)*hw(i,512)*hw(j,512) for i in range(NX)] for j in range(NY)],np.float32)
-  print(str(time.time())+": Test images generated")
-  print("Images shape: "+str(images.shape))
-  v = save("tiffwriter_test.tiff",images)
+    import time
+    print(str(time.time())+": Generating test images")
+    for t in range(NT):
+        images[t,:,:] = np.array([[(255-t*25)*hw(i,512)*hw(j,512) for i in range(NX)] for j in range(NY)],np.float32)
+    print(str(time.time())+": Test images generated")
+    print("Images shape: "+str(images.shape))
+    v = save("tiffwriter_test.tiff",images)

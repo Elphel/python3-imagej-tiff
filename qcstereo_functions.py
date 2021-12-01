@@ -31,14 +31,14 @@ def print_time(txt="",end="\n"):
     TIME_LAST = t
 
 DEFAULT_TITLES = [
-        ['test_lvar','Test_flat_heuristic'],
-        ['test_hvar','Test_edge_heuristic'],
-        ['test_lvar1','Test_flat_random'],
-        ['test_hvar1','Test_edge_random'],
-        ['fake_lvar','Fake_flat_heuristic'],
-        ['fake_hvar','Fake_edge_heuristic'],
-        ['fake_lvar1','Fake_flat_random'],
-        ['fake_hvar1','Fake_edge_random']]
+        ['test_lvar',  'Test_flat_heuristic'],
+        ['test_hvar',  'Test_edge_heuristic'],
+        ['test_lvar1', 'Test_flat_random'],
+        ['test_hvar1', 'Test_edge_random'],
+        ['fake_lvar',  'Fake_flat_heuristic'],
+        ['fake_hvar',  'Fake_edge_heuristic'],
+        ['fake_lvar1', 'Fake_flat_random'],
+        ['fake_hvar1', 'Fake_edge_random']]
     
 def parseXmlConfig(conf_file, root_dir):
     tree = ET.parse(conf_file)
@@ -517,6 +517,7 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=No
            data will be written as 4-layer tiff, extension '.npy' replaced with '.tiff'
     @param absolute - True - the first layer contains absolute disparity, False - difference from target_disparity
     @param fix_nan - replace nan in target_disparity with 0 to apply offset, target_disparity will still contain nan
+    @parame insert_deltas: +1 - add delta layers, +2 - add variance (max - min of this and 8 neighbors)
     """
     data = np.load(npy_path) #(324,242,4) [nn_disp, target_disp,gt_disp, gt_conf]
     if labels is None:
@@ -525,13 +526,18 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=No
     nn_out =            0
 #    target_disparity =  1     
     gt_disparity =      2     
-    gt_strength =       3     
+    gt_strength =       3
+    heur_err =          7
+    min_heur_err =      0.001     
+    height = data.shape[0]
+    width =  data.shape[1]
+    nocenter9 = np.array([[[1,1,1,1,np.nan,1,1,1,1]]], dtype = data.dtype)
     if not absolute:
         if fix_nan:
             data[...,nn_out] +=  np.nan_to_num(data[...,1], copy=True)
         else:
             data[...,nn_out] +=  data[...,1]
-    if insert_deltas:
+    if (insert_deltas & 1):
         np.nan_to_num(data[...,gt_strength], copy=False)
         data = np.concatenate([data[...,0:4],data[...,0:2],data[...,0:2],data[...,4:]], axis = 2) # data[...,4:] may be empty
         labels = labels[:4]+["nn_out","hier_out","nn_err","hier_err"]+labels[4:]
@@ -543,6 +549,69 @@ def result_npy_prepare(npy_path, absolute, fix_nan, insert_deltas=True,labels=No
         # All other layers - mast too
         for l in range(8,data.shape[2]):
             data[...,l] = np.select([data[...,gt_strength]==0.0, data[...,gt_strength]>0.0], [np.nan,data[...,l]])
+        """
+        Calculate bad tiles where ggt was used as a master, to remove them from the results (later versions add random error)
+        """
+        bad1 =     abs(data[...,heur_err]) < min_heur_err
+        bad1_ext = np.concatenate([bad1    [0:1,:], bad1    [0:1,:], bad1[:,:],     bad1    [-1:height,:], bad1    [-1:height,:]],axis = 0)
+        bad1_ext = np.concatenate([bad1_ext[:,0:1], bad1_ext[:,0:1], bad1_ext[:,:], bad1_ext[:,-1:width],  bad1_ext[:,-1:width]], axis = 1)
+        bad25 = np.empty(shape=[height, width, 25], dtype=bad1.dtype)
+        bm25=np.array([[[1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1, 1,1,1,1,1]]])
+        bm09=np.array([[[0,0,0,0,0, 0,1,1,1,0, 0,1,1,1,0, 0,1,1,1,0, 0,0,0,0,0]]])
+        bm01=np.array([[[0,0,0,0,0, 0,0,0,0,0, 0,0,1,0,0, 0,0,0,0,0, 0,0,0,0,0]]])
+        for row in range(5):
+            for col in range(5):
+                pass
+                bad25  [...,row*5+col]= bad1_ext[row:height+row, col:width+col] 
+            
+        bad_num1=(np.sum(bad25*bm25,axis=2) > 0).astype(data.dtype)  
+        bad_num2=(np.sum(bad25*bm09,axis=2) > 0).astype(data.dtype) 
+        bad_num3=(np.sum(bad25*bm01,axis=2) > 0).astype(data.dtype)
+        bad_num = bad_num1 + bad_num2 + bad_num3   
+    if (insert_deltas & 2):
+        wo = 0.7 # ortho
+        wc = 0.5 #corner
+        w8=np.array([wc,wo,wc,wo,0.0,wo,wc,wo,wc], dtype=data.dtype)
+        w8/=np.sum(w8) #normalize
+        
+        gt_ext =  np.concatenate([data[0:1,:,gt_disparity],data[:,:,gt_disparity],data[-1:height,:,gt_disparity]],axis = 0)
+        gt_ext =  np.concatenate([gt_ext[:,0:1],           gt_ext[:,:],           gt_ext[:,-1:width]],axis = 1)
+        gs_ext =  np.concatenate([data[0:1,:,gt_strength], data[:,:,gt_strength], data[-1:height,:,gt_strength]],axis = 0)
+        gs_ext =  np.concatenate([gs_ext[:,0:1],           gs_ext[:,:],           gs_ext[:,-1:width]],axis = 1)
+        
+        data9 =   np.empty(shape=[height, width, 9], dtype=data.dtype)
+        weight9 = np.empty(shape=[height, width, 9], dtype=data.dtype)
+        for row in range(3):
+            for col in range(3):
+                pass
+                data9  [...,row*3+col]= gt_ext[row:height+row, col:width+col] 
+                weight9[...,row*3+col]= gs_ext[row:height+row, col:width+col]
+                
+        data9 *= weight9/weight9 # make data=nan where wigth is 0         
+            
+#        data = np.concatenate([data[...],np.empty_like(data[...,-1])], axis = 2) # data[...,4:] may be empty
+        data =        np.concatenate([data[...],np.empty(shape=[height,width,4],dtype=data.dtype)], axis = 2) # data[...,4:] may be empty
+        data[...,-4] = np.nanmax(data9*nocenter9, axis=2)-np.nanmin(data9*nocenter9,axis=2)# will ignore nan
+        
+        np.nan_to_num(data9,copy=False) # replace all nan in data9 with 0.
+        weight9 *= w8
+        w_center =   np.sum(weight9, axis=2) 
+        dw_center =  np.sum(data9*weight9, axis=2)
+        dw_center /= w_center # now dw_center - weighted average in the center  
+        
+        data[...,-3] = np.abs(data[...,gt_disparity]- dw_center)
+        
+#        data[...,-2] = data[...,gt_disparity]- dw_center
+        #data[...,-3] *= (data[...,-4] < 1.0) # just temporary
+        #data[...,-3] *= (data[...,gt_disparity] < 5) #just temporary
+
+        data[...,-2] =bad_num.astype(data.dtype)
+        
+        data [...,-1]= np.sum(np.nan_to_num(weight9/weight9),axis=2).astype(data.dtype)
+#        data[...,-1] = dw_center
+        labels +=["max-min","abs-center","badness","neibs"]
+        #neib = np.concatenate([gt_ext[:height,:width,:],],axis = )
+        pass
     return data, labels        
 
 def result_npy_to_tiff(npy_path,

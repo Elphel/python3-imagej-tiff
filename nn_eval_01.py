@@ -13,11 +13,14 @@ import sys
 
 #import numpy as np
 
+import imagej_tiffwriter
+
 import time
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_pdf import PdfPages
 import qcstereo_functions as qsf
+import numpy as np
 
 #import xml.etree.ElementTree as ET
 
@@ -132,28 +135,144 @@ fig_params = get_fig_params(dbg_parameters['disparity_ranges'])
 
 pass
 
+#temporary:
+TIFF_ONLY = False # True
+#max_bad =        2.5 # excludes only direct bad
+max_bad =        2.5 #2.5 # 1.5 # excludes only direct bad
+max_diff =       1.5 # 2.0 # 5.0 # maximal max-min difference
+max_target_err = 1.0 # 0.5 # maximal max-min difference
+max_disp =       5.0
+
+min_strength =   0.18 #ignore tiles below
+min_neibs =      1
+max_log_to_mm =  0.5 # difference between center average and center should be under this fraction of max-min (0 - disables feature) 
+
+
+#num_bins = 256 # number of histogram bins
+num_bins =        15 # 50 # number of histogram bins
+use_gt_weights = True # False # True
+index_gt =         2
+index_gt_weight =  3
+index_heur_err =   7
+index_nn_err =     6
+index_mm =         8 # max-min
+index_log =        9
+index_bad =       10
+index_num_neibs = 11
+"""
+Debugging high 9-tile variations, removing error for all tiles with lower difference between max and min
+"""
+#min_diff =       0.25 # remove all flat tiles with spread less than this (do not show on heuristic/network disparity errors subplots 
+min_diff =       0 # remove all flat tiles with spread less than this 
+
+
+
+
+max_target_err2 = max_target_err * max_target_err
 if not 'show' in FIGS_SAVESHOW:
     plt.ioff()
 
-for mode in ['train','infer']:
+#for mode in ['train','infer']:
+for mode in ['infer']:
     figs = []
     ffiles = [] # no ext
     def setlimsxy(lim_xy):
         if not lim_xy is None:
             plt.xlim(min(lim_xy[:2]),max(lim_xy[:2]))            
-            plt.ylim(max(lim_xy[2:]),min(lim_xy[2:]))            
+            plt.ylim(max(lim_xy[2:]),min(lim_xy[2:]))
+    cumul_weights = None                   
         
     for nfile, fpars in enumerate(fig_params):
         if not fpars is None:
             img_file = files['result'][nfile]
             if mode == 'infer':
                 img_file = img_file.replace('.npy','-infer.npy')
+            """    
             try:    
-                data,_ = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=True)
+#                data,_ = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=True)
+#                data,_ = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=3)
+                data,labels = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=3)
             except:
                 print ("Image file does not exist:", img_file)
                 continue
-            
+            """
+            pass
+            data,labels = qsf.result_npy_prepare(img_file, ABSOLUTE_DISPARITY, fix_nan=True, insert_deltas=3)
+            if  True: #TIFF_ONLY:
+                
+                
+                tiff_path = img_file.replace('.npy','-test.tiff')
+                        
+                data = data.transpose(2,0,1)
+                print("Saving results to TIFF: "+tiff_path)
+                imagej_tiffwriter.save(tiff_path,data,labels=labels)
+                """
+                Calculate histograms
+                """
+                err_heur2 = data[index_heur_err]*data[index_heur_err] 
+                err_nn2 =   data[index_nn_err]*  data[index_nn_err] 
+                diff_log2 = data[index_log]*     data[index_log] 
+                weights = (
+                    (data[index_gt] < max_disp) & 
+                    (err_heur2 < max_target_err2) &
+                    (data[index_bad] < max_bad) &
+                    (data[index_gt_weight] >= min_strength) &
+                    (data[index_num_neibs] >= min_neibs)&
+#max_log_to_mm =  0.5 # difference between center average and center should be under this fraction of max-min (0 - disables feature) 
+                    (data[index_log] < max_log_to_mm * np.sqrt(data[index_mm]) )                    
+                    ).astype(data.dtype) # 0.0/1.1
+                #max_disp
+                
+                #max_target_err
+                if  use_gt_weights:
+                    weights *= data[index_gt_weight]
+                mm =     data[index_mm]
+                weh = np.nan_to_num(weights*err_heur2)
+                wen = np.nan_to_num(weights*err_nn2)
+                wel = np.nan_to_num(weights*diff_log2)
+                hist_weights,bin_vals =   np.histogram(a=mm, bins = num_bins, range = (0.0, max_diff), weights = weights,  density = False)
+                hist_err_heur2,_ = np.histogram(a=mm, bins = num_bins, range = (0.0, max_diff), weights = weh,      density = False)
+                hist_err_nn2,_ =   np.histogram(a=mm, bins = num_bins, range = (0.0, max_diff), weights = wen,      density = False)
+                hist_diff_log2,_ = np.histogram(a=mm, bins = num_bins, range = (0.0, max_diff), weights = wel,      density = False)
+                if cumul_weights is None:
+                    cumul_weights =    hist_weights
+                    cumul_err_heur2 =  hist_err_heur2
+                    cumul_err_nn2 =    hist_err_nn2
+                    cumul_diff_log2 =  hist_diff_log2
+                else:
+                    cumul_weights +=   hist_weights
+                    cumul_err_heur2 += hist_err_heur2
+                    cumul_err_nn2 +=   hist_err_nn2
+                    cumul_diff_log2 += hist_diff_log2
+                
+                hist_err_heur2 =   np.nan_to_num(hist_err_heur2/hist_weights)
+                hist_err_nn2 =     np.nan_to_num(hist_err_nn2/hist_weights)
+                hist_gain2 = np.nan_to_num(hist_err_heur2/hist_err_nn2)
+                hist_gain = np.sqrt(hist_gain2)
+                hist_diff_log2 =   np.nan_to_num(hist_diff_log2/hist_weights)
+
+                print("hist_err_heur2", end = " ")
+                print(np.sqrt(hist_err_heur2))
+                print("hist_err_nn2", end = " ")
+                print(np.sqrt(hist_err_nn2))
+                print("hist_gain", end = " ")
+                print(hist_gain)
+                print("hist_diff_log2", end = " ")
+                print(np.sqrt(hist_diff_log2))
+                
+                
+                if min_diff> 0.0:
+                    pass
+                    good = (mm > min_diff).astype(mm.dtype)
+                    good /= good # good - 1, bad - nan
+                    data[index_heur_err] *= good
+                    data[index_nn_err] *= good
+                data = data.transpose(1,2,0)
+                
+            if TIFF_ONLY:
+                continue
+        
+        
             for subindex, rng in enumerate(fpars['ranges']):
                 lim_val = rng['lim_val']
                 lim_xy =  rng['lim_xy']
@@ -214,7 +333,68 @@ for mode in ['train','infer']:
                         fb_noext+="-"+str(subindex)
                 ffiles.append(fb_noext)
                 pass
+    if True:
+        cumul_err_heur2 =   np.nan_to_num(cumul_err_heur2/cumul_weights)
+        cumul_err_nn2 =     np.nan_to_num(cumul_err_nn2/cumul_weights)
+        cumul_gain2 =       np.nan_to_num(cumul_err_heur2/cumul_err_nn2)
+        cumul_gain =        np.sqrt(cumul_gain2)
+        cumul_diff_log2 =   np.nan_to_num(cumul_diff_log2/cumul_weights)
+        print("cumul_weights", end = " ")
+        print(cumul_weights)
+        print("cumul_err_heur", end = " ")
+        print(np.sqrt(cumul_err_heur2))
+        print("cumul_err_nn", end = " ")
+        print(np.sqrt(cumul_err_nn2))
+        print("cumul_gain", end = " ")
+        print(cumul_gain)
+        print("cumul_diff_log2", end = " ")
+        print(np.sqrt(cumul_diff_log2))
+        fig, ax1 = plt.subplots()
+        ax1.set_xlabel('3x3 tiles ground truth disparity max-min (pix)')
+        ax1.set_ylabel('RMSE\n(pix)', color='black', rotation='horizontal')
+        ax1.yaxis.set_label_coords(-0.045,0.92)
+        
+        ax1.plot(bin_vals[0:-1], np.sqrt(cumul_err_nn2),   'tab:red',label="network disparity RMSE")
+        ax1.plot(bin_vals[0:-1], np.sqrt(cumul_err_heur2), 'tab:green',label="heuristic disparity RMSE")
+        ax1.plot(bin_vals[0:-1], np.sqrt(cumul_diff_log2), 'tab:cyan',label="ground truth LoG")
+        
+        ax1.tick_params(axis='y', labelcolor='black')
+        
+        ax2 = ax1.twinx()  # instantiate a second axes that shares the same x-axis
+        ax2.set_ylabel('weight', color='black', rotation='horizontal')  # we already handled the x-label with ax1  
+        ax2.yaxis.set_label_coords(1.06,1.0)
+        
+        
+              
+        ax2.plot(bin_vals[0:-1], cumul_weights,color='grey',dashes=[6, 2],label='weights = n_tiles * gt_confidence')
+        ax1.legend(loc="upper left", bbox_to_anchor=(0.2,1.0))
+        ax2.legend(loc="lower right", bbox_to_anchor=(1.0,0.1))
+        
+        """
     
+        fig = plt.figure(figsize=FIGSIZE)
+        fig.canvas.set_window_title('Cumulative')
+        fig.suptitle('Difference to GT')
+#        ax_conf=plt.subplot(322)
+        ax_conf=plt.subplot(211)
+        ax_conf.set_title("RMS vs max9-min9")
+        plt.plot(bin_vals[0:-1], np.sqrt(cumul_err_heur2),'red',
+                 bin_vals[0:-1], np.sqrt(cumul_err_nn2),'green',
+                 bin_vals[0:-1], np.sqrt(cumul_diff_log2),'blue')
+        figs.append(fig)
+        ffiles.append('cumulative')
+        ax_conf=plt.subplot(212)
+        ax_conf.set_title("weights vs max9-min9")
+        plt.plot(bin_vals[0:-1], cumul_weights,'black')
+        """
+        figs.append(fig)
+        ffiles.append('cumulative')
+        pass
+        #bin_vals[0:-1]
+        
+#            fig.suptitle("Groud truth confidence")
+
+#    
     #whow to allow adjustment before applying tight_layout?
     pass
     for fig in figs:
@@ -229,9 +409,9 @@ for mode in ['train','infer']:
         pp=None
         if 'pdf' in FIGS_EXTENSIONS:
             if mode == 'infer':
-                pdf_path = os.path.join(dirs['figures'],"figures-infer.pdf")
+                pdf_path = os.path.join(dirs['figures'],"figures-infer%s.pdf"%str(min_diff))
             else:
-                pdf_path = os.path.join(dirs['figures'],"figures-train.pdf")
+                pdf_path = os.path.join(dirs['figures'],"figures-train%s.pdf"%str(min_diff))
             pp= PdfPages(pdf_path)
         
         for fb_noext, fig in zip(ffiles,figs):
@@ -259,8 +439,8 @@ if 'show' in FIGS_SAVESHOW:
 
 #FIGS_ESXTENSIONS
 
-#qsf.evaluateAllResults(result_files = files['result'],
-#                       absolute_disparity = ABSOLUTE_DISPARITY,
-#                       cluster_radius = CLUSTER_RADIUS)
+qsf.evaluateAllResults(result_files = files['result'],
+                       absolute_disparity = ABSOLUTE_DISPARITY,
+                       cluster_radius = CLUSTER_RADIUS)
 print("All done")
 exit (0)
